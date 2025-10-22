@@ -1,28 +1,13 @@
-// lib/features/booking/presentation/widgets/booking_card.dart
 import 'package:flutter/material.dart';
-
-// 1. Định nghĩa các trạng thái
-enum BookingStatus { pending, confirmed, cancelled }
+import 'package:intl/intl.dart'; // Thêm thư viện intl để format ngày và tiền
+import '../../domain/entities/booking.dart'; // Import Entity
+import '../../domain/entities/booking_status.dart'; // Import Enum
 
 class BookingCard extends StatelessWidget {
-  final String customerName;
-  final String phone;
-  final String studioName;
-  final String date;
-  final String time;
-  final String price;
-  final BookingStatus status;
+  // Thay vì nhiều trường, chỉ cần 1 object Booking
+  final Booking booking;
 
-  const BookingCard({
-    super.key,
-    required this.customerName,
-    required this.phone,
-    required this.studioName,
-    required this.date,
-    required this.time,
-    required this.price,
-    required this.status,
-  });
+  const BookingCard({super.key, required this.booking});
 
   @override
   Widget build(BuildContext context) {
@@ -44,26 +29,31 @@ class BookingCard extends StatelessWidget {
         children: [
           _buildHeader(),
           Divider(height: 24, color: Colors.grey[200]),
-          _buildInfoRow(Icons.music_note, studioName),
+          _buildInfoRow(Icons.music_note, booking.studioName),
           SizedBox(height: 8),
-          _buildInfoRow(Icons.calendar_today, date),
+          _buildInfoRow(
+            Icons.calendar_today,
+            DateFormat('dd/MM/yyyy').format(booking.bookingDate),
+          ),
           SizedBox(height: 8),
-          _buildInfoRow(Icons.access_time, time),
+          _buildInfoRow(
+            Icons.access_time,
+            DateFormat('HH:mm').format(booking.bookingDate),
+          ), // Giả sử time
           SizedBox(height: 16),
-          // 4. Hiển thị nút bấm tùy theo status
           _buildActionButtons(),
         ],
       ),
     );
   }
 
-  // 2. Tách nhỏ các phần bên trong card
   Widget _buildHeader() {
     Color statusColor;
     String statusText;
     Color statusTagColor;
 
-    switch (status) {
+    // Dùng booking.status (Enum)
+    switch (booking.status) {
       case BookingStatus.pending:
         statusColor = Colors.orange;
         statusText = "Chờ xác nhận";
@@ -79,7 +69,17 @@ class BookingCard extends StatelessWidget {
         statusText = "Đã hủy";
         statusTagColor = Colors.red.shade50;
         break;
+      default: // Cho trường hợp unknown
+        statusColor = Colors.grey;
+        statusText = "Không rõ";
+        statusTagColor = Colors.grey.shade50;
     }
+
+    // Format tiền tệ
+    final priceString = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: 'đ',
+    ).format(booking.total);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -88,18 +88,22 @@ class BookingCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              customerName,
+              booking.customerName, // Lấy từ booking.customerName
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 4),
-            Text(phone, style: TextStyle(fontSize: 14, color: Colors.grey)),
+            Text(
+              // Kiểm tra phone null
+              booking.phone ?? "Không có SĐT",
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
           ],
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              price,
+              priceString, // Dùng giá đã format
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -138,17 +142,18 @@ class BookingCard extends StatelessWidget {
     );
   }
 
-  // 3. Widget quyết định hiển thị nút nào
   Widget _buildActionButtons() {
-    if (status == BookingStatus.pending) {
-      // Hiển thị 2 nút "Xác nhận" và "Hủy"
+    if (booking.status == BookingStatus.pending) {
+      // (Giữ nguyên logic nút bấm của bạn)
       return Row(
         children: [
           Expanded(
             child: OutlinedButton.icon(
               icon: Icon(Icons.check_circle_outline),
               label: Text("Xác nhận"),
-              onPressed: () {},
+              onPressed: () {
+                // TODO: Gọi provider.confirmBooking(booking.id)
+              },
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.green,
                 side: BorderSide(color: Colors.green),
@@ -163,7 +168,9 @@ class BookingCard extends StatelessWidget {
             child: OutlinedButton.icon(
               icon: Icon(Icons.cancel_outlined),
               label: Text("Hủy"),
-              onPressed: () {},
+              onPressed: () {
+                // TODO: Gọi provider.cancelBooking(booking.id)
+              },
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: BorderSide(color: Colors.red),
@@ -177,7 +184,6 @@ class BookingCard extends StatelessWidget {
       );
     }
 
-    // Hiển thị nút "Chi tiết" cho các trạng thái khác
     return Center(
       child: TextButton(
         child: Text(
