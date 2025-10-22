@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1095015968761",
+    "project_id": "studiomanagerapp-dfbe4",
+    "storage_bucket": "studiomanagerapp-dfbe4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1095015968761:android:58dca3de37d3a192f05728",
+        "android_client_info": {
+          "package_name": "com.example.swd_mobie_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDTkRqOLWTwjTaMz-qKxfX6gOIH658tAp4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
