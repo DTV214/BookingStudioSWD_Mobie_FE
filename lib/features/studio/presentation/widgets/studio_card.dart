@@ -1,60 +1,139 @@
-// lib/features/studio/presentation/widgets/studio_card.dart
 import 'package:flutter/material.dart';
-
-enum StudioStatus { available, inUse, maintenance }
+import 'package:swd_mobie_flutter/features/studio/presentation/widgets/studio_edit_page.dart';
+import '../../domain/entities/studio.dart';
+// 1. Import trang edit mới của bạn
 
 class StudioCard extends StatelessWidget {
-  final String imageUrl;
-  final StudioStatus status;
-  final String studioName;
-  final String price;
-  final String studioType;
-  final String booking;
-  final String capacity;
-  final String revenue;
-  final double usage; // Tỷ lệ %
-  final List<String> equipments;
+  final Studio studio;
 
-  const StudioCard({
-    super.key,
-    required this.imageUrl,
-    required this.status,
-    required this.studioName,
-    required this.price,
-    required this.studioType,
-    required this.booking,
-    required this.capacity,
-    required this.revenue,
-    required this.usage,
-    required this.equipments,
-  });
+  const StudioCard({super.key, required this.studio});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      // Dùng Stack để đặt thẻ trạng thái "chồng" lên ảnh
+      child: Stack(
         children: [
-          _buildImage(),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16), // Tăng bo góc
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 15,
+                  offset: Offset(0, 5),
+                ),
+              ],
+            ),
+            // Dùng Column cho nội dung bên dưới ảnh
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(),
-                SizedBox(height: 12),
-                _buildStats(),
-                SizedBox(height: 12),
-                _buildUsageBar(),
-                SizedBox(height: 16),
-                _buildEquipments(),
-                Divider(height: 24),
-                _buildActionButtons(),
+                _buildImage(), // Ảnh
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(), // Tên, loại studio
+                      SizedBox(height: 12),
+                      _buildInfo(), // Địa điểm
+                      SizedBox(height: 12),
+                      _buildDescription(), // Mô tả
+                      Divider(height: 32, thickness: 0.5),
+                      _buildActionButtons(context), // Nút bấm
+                    ],
+                  ),
+                ),
               ],
+            ),
+          ),
+          // Đặt thẻ trạng thái ở góc trên bên phải
+          Positioned(top: 12, right: 12, child: _buildStatusTag()),
+        ],
+      ),
+    );
+  }
+
+  // Widget hiển thị ảnh và ảnh lỗi
+  Widget _buildImage() {
+    return ClipRRect(
+      borderRadius: BorderRadius.only(
+        topLeft: Radius.circular(16),
+        topRight: Radius.circular(16),
+      ),
+      child: Image.network(
+        studio.imageUrl,
+        height: 160, // Tăng chiều cao ảnh
+        width: double.infinity,
+        fit: BoxFit.cover,
+        // Cải thiện phần hiển thị ảnh lỗi
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: 160,
+            width: double.infinity,
+            color: Colors.grey[100],
+            child: Icon(
+              Icons.camera_alt_outlined, // Dùng icon camera
+              color: Colors.grey[400],
+              size: 48, // Tăng kích thước
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Widget hiển thị thẻ trạng thái (Available, InUse, Maintenance)
+  Widget _buildStatusTag() {
+    String statusText;
+    Color statusColor;
+    IconData statusIcon;
+
+    switch (studio.status) {
+      case StudioStatus.available:
+        statusText = "Sẵn sàng";
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle_outline;
+        break;
+ 
+      case StudioStatus.maintenance:
+        statusText = "Bảo trì";
+        statusColor = Colors.red;
+        statusIcon = Icons.build_outlined;
+        break;
+    
+      default:
+        statusText = "Không rõ";
+        statusColor = Colors.grey;
+        statusIcon = Icons.help_outline;
+        break;
+    }
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: statusColor,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.3),
+            blurRadius: 5,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(statusIcon, color: Colors.white, size: 14),
+          SizedBox(width: 4),
+          Text(
+            statusText,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600, // In đậm
             ),
           ),
         ],
@@ -62,189 +141,111 @@ class StudioCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImage() {
-    String statusText;
-    Color statusColor;
-
-    switch (status) {
-      case StudioStatus.available:
-        statusText = "Sẵn sàng";
-        statusColor = Colors.green;
-        break;
-      case StudioStatus.inUse:
-        statusText = "Đang sử dụng";
-        statusColor = Colors.orange;
-        break;
-      case StudioStatus.maintenance:
-        statusText = "Bảo trì";
-        statusColor = Colors.red;
-        break;
-    }
-
-    return Stack(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(12),
-            topRight: Radius.circular(12),
-          ),
-          child: Image.network(
-            imageUrl,
-            height: 150,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
-        ),
-        Positioned(
-          top: 12,
-          right: 12,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              statusText,
-              style: TextStyle(color: Colors.white, fontSize: 12),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 12,
-          left: 12,
-          child: CircleAvatar(
-            backgroundColor: Colors.black.withOpacity(0.4),
-            child: Icon(Icons.camera_alt, color: Colors.white, size: 18),
-          ),
-        ),
-      ],
-    );
-  }
-
+  // Widget hiển thị Tên và Loại Studio
   Widget _buildHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(studioType, style: TextStyle(fontSize: 12, color: Colors.grey)),
-        SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              studioName,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              price,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF6A40D3),
-              ),
-            ),
-          ],
+        Text(
+          studio.studioTypeName.toUpperCase(), // VIẾT HOA
+          style: TextStyle(
+            fontSize: 11,
+            color: Color(0xFF6A40D3),
+            fontWeight: FontWeight.w700, // In đậm
+            letterSpacing: 0.5, // Giãn cách chữ
+          ),
+        ),
+        SizedBox(height: 6),
+        Text(
+          studio.studioName,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600, // Đậm vừa
+            color: Colors.black87,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
   }
 
-  Widget _buildStats() {
+  // Widget hiển thị thông tin (Địa điểm)
+  Widget _buildInfo() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildStatItem("Booking", booking),
-        _buildStatItem("Sức chứa", capacity),
-        _buildStatItem("Doanh thu", revenue),
+        Icon(Icons.location_on_outlined, size: 16, color: Colors.grey[600]),
+        SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            studio.locationName,
+            style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
+  // Widget hiển thị mô tả
+  Widget _buildDescription() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(
+          "Mô tả",
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         SizedBox(height: 4),
         Text(
-          value,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          studio.description,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.black87,
+            height: 1.4,
+          ), // Giãn dòng
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
   }
 
-  Widget _buildUsageBar() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Tỷ lệ sử dụng",
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+  // Widget hiển thị nút bấm
+  Widget _buildActionButtons(BuildContext context) {
+    return Align(
+      // 1. Chỉ còn 1 nút, căn ra giữa hoặc cuối
+      // Dùng Align để nó không chiếm toàn bộ chiều rộng
+      alignment: Alignment.center,
+      child: FilledButton.icon(
+        // 2. Dùng FilledButton để có nền
+        icon: Icon(Icons.edit_outlined, size: 18),
+        label: Text(
+          "Chỉnh sửa thông tin",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        onPressed: () {
+          // 3. THÊM HÀNH ĐỘNG ĐIỀU HƯỚNG
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => StudioEditPage(
+                studio: studio, // Truyền đối tượng studio qua
+              ),
             ),
-            Text(
-              "$usage%",
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ],
+          );
+        },
+        style: Theme.of(context).filledButtonTheme.style?.copyWith(
+          // Style này lấy từ AppTheme, chúng ta chỉ cần ghi đè nếu muốn
+          padding: MaterialStateProperty.all(
+            EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
         ),
-        SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: usage / 100, // giá trị từ 0.0 đến 1.0
-          backgroundColor: Colors.grey[200],
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6A40D3)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEquipments() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text("Thiết bị", style: TextStyle(fontSize: 12, color: Colors.grey)),
-        SizedBox(height: 8),
-        Wrap(
-          // Tự động xuống hàng nếu ko đủ chỗ
-          spacing: 8,
-          runSpacing: 8,
-          children: equipments
-              .map(
-                (e) => Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(e, style: TextStyle(fontSize: 12)),
-                ),
-              )
-              .toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        TextButton.icon(
-          icon: Icon(Icons.info_outline, size: 18),
-          label: Text("Xem chi tiết"),
-          onPressed: () {},
-          style: TextButton.styleFrom(foregroundColor: Colors.blue),
-        ),
-        TextButton.icon(
-          icon: Icon(Icons.edit_outlined, size: 18),
-          label: Text("Chỉnh sửa"),
-          onPressed: () {},
-          style: TextButton.styleFrom(foregroundColor: Color(0xFF6A40D3)),
-        ),
-      ],
+      ),
     );
   }
 }
