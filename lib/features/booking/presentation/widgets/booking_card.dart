@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Thêm thư viện intl để format ngày và tiền
-import '../../domain/entities/booking.dart'; // Import Entity
-import '../../domain/entities/booking_status.dart'; // Import Enum
+import 'package:intl/intl.dart';
+import 'package:swd_mobie_flutter/features/booking/presentation/widgets/booking_detail_page.dart';
+import '../../domain/entities/booking.dart';
+import '../../domain/entities/booking_status.dart';
+// (IMPORT MỚI) Thêm import cho trang chi tiết
+
 
 class BookingCard extends StatelessWidget {
-  // Thay vì nhiều trường, chỉ cần 1 object Booking
   final Booking booking;
 
   const BookingCard({super.key, required this.booking});
+
+  // ... (các hàm _buildHeader, _buildInfoRow giữ nguyên) ...
+  // (Tôi sẽ copy lại các hàm đó ở đây cho bạn)
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,8 @@ class BookingCard extends StatelessWidget {
             DateFormat('HH:mm').format(booking.bookingDate),
           ), // Giả sử time
           SizedBox(height: 16),
-          _buildActionButtons(),
+          // Sửa hàm này
+          _buildActionButtons(context),
         ],
       ),
     );
@@ -142,59 +148,28 @@ class BookingCard extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButtons() {
-    if (booking.status == BookingStatus.pending) {
-      // (Giữ nguyên logic nút bấm của bạn)
-      return Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: Icon(Icons.check_circle_outline),
-              label: Text("Xác nhận"),
-              onPressed: () {
-                // TODO: Gọi provider.confirmBooking(booking.id)
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.green,
-                side: BorderSide(color: Colors.green),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: Icon(Icons.cancel_outlined),
-              label: Text("Hủy"),
-              onPressed: () {
-                // TODO: Gọi provider.cancelBooking(booking.id)
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                side: BorderSide(color: Colors.red),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
+  // --- (PHẦN CẬP NHẬT) ---
+  // Sửa hàm này
+  Widget _buildActionButtons(BuildContext context) {
+    // Xóa bỏ logic IF, luôn hiển thị nút "Chi tiết"
     return Center(
       child: TextButton(
         child: Text(
-          "Chi tiết",
+          "Xem chi tiết",
           style: TextStyle(
             color: Color(0xFF6A40D3),
             fontWeight: FontWeight.w600,
           ),
         ),
         onPressed: () {
-          // TODO: Mở trang chi tiết
+          // Xử lý điều hướng
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              // Truyền object 'booking' sang trang mới
+              builder: (context) => BookingDetailPage(booking: booking),
+            ),
+          );
         },
       ),
     );
