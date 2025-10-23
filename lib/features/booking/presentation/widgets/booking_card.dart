@@ -1,28 +1,18 @@
-// lib/features/booking/presentation/widgets/booking_card.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:swd_mobie_flutter/features/booking/presentation/widgets/booking_detail_page.dart';
+import '../../domain/entities/booking.dart';
+import '../../domain/entities/booking_status.dart';
+// (IMPORT MỚI) Thêm import cho trang chi tiết
 
-// 1. Định nghĩa các trạng thái
-enum BookingStatus { pending, confirmed, cancelled }
 
 class BookingCard extends StatelessWidget {
-  final String customerName;
-  final String phone;
-  final String studioName;
-  final String date;
-  final String time;
-  final String price;
-  final BookingStatus status;
+  final Booking booking;
 
-  const BookingCard({
-    super.key,
-    required this.customerName,
-    required this.phone,
-    required this.studioName,
-    required this.date,
-    required this.time,
-    required this.price,
-    required this.status,
-  });
+  const BookingCard({super.key, required this.booking});
+
+  // ... (các hàm _buildHeader, _buildInfoRow giữ nguyên) ...
+  // (Tôi sẽ copy lại các hàm đó ở đây cho bạn)
 
   @override
   Widget build(BuildContext context) {
@@ -44,26 +34,32 @@ class BookingCard extends StatelessWidget {
         children: [
           _buildHeader(),
           Divider(height: 24, color: Colors.grey[200]),
-          _buildInfoRow(Icons.music_note, studioName),
+          _buildInfoRow(Icons.music_note, booking.studioName),
           SizedBox(height: 8),
-          _buildInfoRow(Icons.calendar_today, date),
+          _buildInfoRow(
+            Icons.calendar_today,
+            DateFormat('dd/MM/yyyy').format(booking.bookingDate),
+          ),
           SizedBox(height: 8),
-          _buildInfoRow(Icons.access_time, time),
+          _buildInfoRow(
+            Icons.access_time,
+            DateFormat('HH:mm').format(booking.bookingDate),
+          ), // Giả sử time
           SizedBox(height: 16),
-          // 4. Hiển thị nút bấm tùy theo status
-          _buildActionButtons(),
+          // Sửa hàm này
+          _buildActionButtons(context),
         ],
       ),
     );
   }
 
-  // 2. Tách nhỏ các phần bên trong card
   Widget _buildHeader() {
     Color statusColor;
     String statusText;
     Color statusTagColor;
 
-    switch (status) {
+    // Dùng booking.status (Enum)
+    switch (booking.status) {
       case BookingStatus.pending:
         statusColor = Colors.orange;
         statusText = "Chờ xác nhận";
@@ -79,7 +75,17 @@ class BookingCard extends StatelessWidget {
         statusText = "Đã hủy";
         statusTagColor = Colors.red.shade50;
         break;
+      default: // Cho trường hợp unknown
+        statusColor = Colors.grey;
+        statusText = "Không rõ";
+        statusTagColor = Colors.grey.shade50;
     }
+
+    // Format tiền tệ
+    final priceString = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: 'đ',
+    ).format(booking.total);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -88,18 +94,22 @@ class BookingCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              customerName,
+              booking.customerName, // Lấy từ booking.customerName
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 4),
-            Text(phone, style: TextStyle(fontSize: 14, color: Colors.grey)),
+            Text(
+              // Kiểm tra phone null
+              booking.phone ?? "Không có SĐT",
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
           ],
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              price,
+              priceString, // Dùng giá đã format
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -138,57 +148,28 @@ class BookingCard extends StatelessWidget {
     );
   }
 
-  // 3. Widget quyết định hiển thị nút nào
-  Widget _buildActionButtons() {
-    if (status == BookingStatus.pending) {
-      // Hiển thị 2 nút "Xác nhận" và "Hủy"
-      return Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: Icon(Icons.check_circle_outline),
-              label: Text("Xác nhận"),
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.green,
-                side: BorderSide(color: Colors.green),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: Icon(Icons.cancel_outlined),
-              label: Text("Hủy"),
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                side: BorderSide(color: Colors.red),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    // Hiển thị nút "Chi tiết" cho các trạng thái khác
+  // --- (PHẦN CẬP NHẬT) ---
+  // Sửa hàm này
+  Widget _buildActionButtons(BuildContext context) {
+    // Xóa bỏ logic IF, luôn hiển thị nút "Chi tiết"
     return Center(
       child: TextButton(
         child: Text(
-          "Chi tiết",
+          "Xem chi tiết",
           style: TextStyle(
             color: Color(0xFF6A40D3),
             fontWeight: FontWeight.w600,
           ),
         ),
         onPressed: () {
-          // TODO: Mở trang chi tiết
+          // Xử lý điều hướng
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              // Truyền object 'booking' sang trang mới
+              builder: (context) => BookingDetailPage(booking: booking),
+            ),
+          );
         },
       ),
     );
