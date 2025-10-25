@@ -1,6 +1,8 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:swd_mobie_flutter/features/booking/data/datasources/booking_remote_data_source_impl.dart';
 import 'package:swd_mobie_flutter/features/booking/data/repositories/booking_repository_impl.dart';
+
 // Import các file gốc của bạn
 import 'layout/main_layout.dart';
 import 'core/theme/app_theme.dart';
@@ -15,6 +17,7 @@ import 'features/studio/data/datasources/studio_remote_data_source.dart';
 
 import 'features/studio/data/repositories/studio_repository_impl.dart';
 import 'features/studio/domain/repositories/studio_repository.dart';
+
 // (Bạn nên tạo usecase cho studio)
 // import 'features/studio/domain/usecases/get_studios_usecase.dart';
 import 'features/studio/presentation/providers/studio_provider.dart';
@@ -26,20 +29,82 @@ import 'features/booking/domain/repositories/booking_repository.dart';
 import 'features/booking/domain/usecases/get_bookings_usecase.dart';
 import 'features/booking/presentation/providers/booking_provider.dart';
 
-void main() {
-  // 2. Bọc toàn bộ ứng dụng bằng MultiProvider
-  runApp(
-    MultiProvider(
-      providers: [
-        // --- Cung cấp các lớp Data & Domain (chỉ tạo 1 lần) ---
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-        // Cung cấp 1 http.Client (Dùng chung cho cả Studio và Booking)
-        Provider<http.Client>(
-          create: (_) => http.Client(),
-          // dispose: (_, client) => client.close(), // Tùy chọn: tự động đóng client
+import 'features/auth/presentation/pages/login_page.dart';
+
+// Import tất cả các lớp đã tạo
+// Data
+import 'features/auth/data/datasources/auth_remote_data_source.dart';
+import 'features/auth/data/datasources/auth_local_data_source.dart';
+import 'features/auth/data/repositories/auth_repository_impl.dart';
+
+// Domain
+import 'features/auth/domain/repositories/auth_repository.dart';
+import 'features/auth/domain/usecases/login_with_google.dart';
+
+// Presentation
+import 'features/auth/presentation/provider/auth_provider.dart';
+
+void main() async {
+  // 1. Đảm bảo WidgetsBinding đã được khởi tạo
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. Khởi tạo Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        // === A. DEPENDENCIES (SINGLETONS) ===
+        Provider<http.Client>(create: (_) => http.Client()),
+        Provider<GoogleSignIn>(
+          create: (_) => GoogleSignIn(
+            serverClientId:
+                "161293462080-uis6ondt03svjsdbqskcadknvt81rqrg.apps.googleusercontent.com",
+          ),
+        ),
+        Provider<FlutterSecureStorage>(
+          create: (_) => const FlutterSecureStorage(),
         ),
 
-        // --- Providers cho Studio (Như cũ của bạn) ---
+        // 1. AUTH - DATA
+        ProxyProvider<FlutterSecureStorage, AuthLocalDataSource>(
+          update: (_, storage, __) =>
+              AuthLocalDataSourceImpl(secureStorage: storage),
+        ),
+        ProxyProvider2<GoogleSignIn, http.Client, AuthRemoteDataSource>(
+          update: (_, googleSignIn, client, __) => AuthRemoteDataSourceImpl(
+            googleSignIn: googleSignIn,
+            client: client,
+          ),
+        ),
+
+        // 2. AUTH - DOMAIN
+        ProxyProvider2<
+          AuthRemoteDataSource,
+          AuthLocalDataSource,
+          AuthRepository
+        >(
+          update: (_, remote, local, __) => AuthRepositoryImpl(
+            remoteDataSource: remote,
+            localDataSource: local,
+          ),
+        ),
+        ProxyProvider<AuthRepository, LoginWithGoogle>(
+          update: (_, repo, __) => LoginWithGoogle(repo),
+        ),
+
+        // 3. STUDIO - DATA & DOMAIN (Lấy từ main-origin.dart)
         Provider<StudioRemoteDataSource>(
           create: (context) =>
               StudioRemoteDataSourceImpl(client: context.read<http.Client>()),
@@ -49,9 +114,9 @@ void main() {
             remoteDataSource: context.read<StudioRemoteDataSource>(),
           ),
         ),
-        // (Bạn nên thêm GetStudiosUsecase ở đây)
+        // (Thêm Studio Usecase ở đây khi bạn tạo)
 
-        // --- Providers cho Booking (Mới) ---
+        // 4. BOOKING - DATA & DOMAIN (Lấy từ main-origin.dart)
         Provider<BookingRemoteDataSource>(
           create: (context) =>
               BookingRemoteDataSourceImpl(client: context.read<http.Client>()),
@@ -66,48 +131,36 @@ void main() {
               GetBookingsUsecase(context.read<BookingRepository>()),
         ),
 
-        // --- Cung cấp các lớp State/Notifier (UI sẽ lắng nghe) ---
+        // === B. STATE MANAGEMENT (CHANGE NOTIFIER PROVIDERS) ===
 
-        // StudioProvider
-        ChangeNotifierProvider<StudioProvider>(
-          create: (context) => StudioProvider(
-            studioRepository: context.read<StudioRepository>(),
-            // (Sau này nên đổi thành usecase)
+        // 1. AUTH - PRESENTATION (Giữ nguyên từ main.dart)
+        ChangeNotifierProvider<AuthProvider>(
+          create: (context) => AuthProvider(
+            loginWithGoogleUseCase: context.read<LoginWithGoogle>(),
           ),
         ),
 
-        // BookingProvider (Mới)
-        ChangeNotifierProvider<BookingProvider>(
-          create: (context) {
-            // LOG MỚI: Thêm vào đây
-            print(
-              "[main.dart] Đang tạo BookingProvider... (Nếu thấy dòng này là tốt)",
-            );
-            return BookingProvider(
-              getBookingsUsecase: context.read<GetBookingsUsecase>(),
-            );
-          },
+        // 2. STUDIO - PRESENTATION (Lấy từ main-origin.dart)
+        ChangeNotifierProvider<StudioProvider>(
+          create: (context) => StudioProvider(
+            studioRepository: context.read<StudioRepository>(),
+          ),
         ),
 
-        // (Sau này bạn có thể thêm các Provider khác ở đây)
+        // 3. BOOKING - PRESENTATION (Lấy từ main-origin.dart)
+        ChangeNotifierProvider<BookingProvider>(
+          create: (context) => BookingProvider(
+            getBookingsUsecase: context.read<GetBookingsUsecase>(),
+          ),
+        ),
       ],
-      // 3. child chính là const MyApp() của bạn
-      child: const MyApp(),
-    ),
-  );
-}
-
-// 4. Class MyApp của bạn giữ nguyên, không cần thay đổi
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Footer Menu', // Giữ nguyên title của bạn
-      theme: AppTheme.lightTheme, // Giữ nguyên theme của bạn
-      home: const MainLayout(), // Giữ nguyên home của bạn
-      debugShowCheckedModeBanner: false, // Thêm dòng này để tắt banner "DEBUG"
+      // 2. MaterialApp
+      child: MaterialApp(
+        title: 'Studio Manager',
+        theme: AppTheme.lightTheme,
+        debugShowCheckedModeBanner: false,
+        home: const LoginPage(),
+      ),
     );
   }
 }
