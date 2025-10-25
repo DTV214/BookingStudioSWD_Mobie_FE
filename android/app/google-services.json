@@ -1,26 +1,36 @@
 {
   "project_info": {
-    "project_number": "1095015968761",
-    "project_id": "studiomanagerapp-dfbe4",
-    "storage_bucket": "studiomanagerapp-dfbe4.firebasestorage.app"
+    "project_number": "161293462080",
+    "project_id": "oauth2-event-flower-exchange",
+    "storage_bucket": "oauth2-event-flower-exchange.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1095015968761:android:58dca3de37d3a192f05728",
+        "mobilesdk_app_id": "1:161293462080:android:1401a4a7c0496bce9dcda5",
         "android_client_info": {
-          "package_name": "com.example.swd_mobie_flutter"
+          "package_name": "com.studio.swd_mobie_flutter"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "161293462080-uis6ondt03svjsdbqskcadknvt81rqrg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyDTkRqOLWTwjTaMz-qKxfX6gOIH658tAp4"
+          "current_key": "AIzaSyC4lctlxLuxqPCefZAVyXOfMKSG7We77ss"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "161293462080-uis6ondt03svjsdbqskcadknvt81rqrg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

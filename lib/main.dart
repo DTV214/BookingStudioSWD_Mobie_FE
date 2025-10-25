@@ -1,4 +1,6 @@
 // lib/main.dart
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -13,13 +15,22 @@ import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/data/datasources/auth_remote_data_source.dart';
 import 'features/auth/data/datasources/auth_local_data_source.dart';
 import 'features/auth/data/repositories/auth_repository_impl.dart';
+
 // Domain
 import 'features/auth/domain/repositories/auth_repository.dart';
 import 'features/auth/domain/usecases/login_with_google.dart';
+
 // Presentation
 import 'features/auth/presentation/provider/auth_provider.dart';
 
-void main() {
+void main() async{
+  // 1. Đảm bảo WidgetsBinding đã được khởi tạo
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. Khởi tạo Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 

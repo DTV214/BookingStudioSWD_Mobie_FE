@@ -31,20 +31,23 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      final String? serverAuthCode = googleAuth.serverAuthCode;
+      final String? idToken = googleAuth.idToken;
 
-      if (serverAuthCode == null) {
+      if (idToken == null) {
         throw GoogleSignInException(
-          'Failed to get server auth code from Google.',
+          'Failed to get ID Token from Google.',
         );
       }
 
       // 3. Gọi API Spring Boot của bạn
-      final String url =
-          'http://localhost:8080/auth/google/callback?code=$serverAuthCode';
-      final response = await client.get(
+      const String url =
+          'https://bookingstudioswd-be.onrender.com/auth/google/android-callback';
+      final response = await client.post(
         Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
       );
 
       // 4. Xử lý kết quả
