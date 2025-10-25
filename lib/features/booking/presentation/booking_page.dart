@@ -1,8 +1,9 @@
-// lib/features/booking/presentation/booking_page.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'widgets/search_and_add.dart';
 import 'widgets/filter_tabs.dart';
 import 'widgets/booking_card.dart';
+import 'providers/booking_provider.dart'; // 1. Import Provider
 
 class BookingPage extends StatelessWidget {
   const BookingPage({super.key});
@@ -36,56 +37,54 @@ class BookingPage extends StatelessWidget {
           const SizedBox(width: 10),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // 1. Thanh tìm kiếm và nút Add
-            SearchAndAdd(),
+      body: Column(
+        children: [
+          // 2. Các widget UI tĩnh (giữ nguyên)
+          SearchAndAdd(),
+          FilterTabs(),
 
-            // 2. Các tab filter
-            FilterTabs(),
+          // 3. Phần body (danh sách) sẽ được quản lý bởi Provider
+          Expanded(
+            // 4. Lắng nghe thay đổi từ BookingProvider
+            child: Consumer<BookingProvider>(
+              builder: (context, provider, child) {
+                // 5. Xử lý các trạng thái
+                if (provider.state == BookingState.loading) {
+                  return Center(
+                    child: CircularProgressIndicator(color: primaryColor),
+                  );
+                }
 
-            // 3. Danh sách booking
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  // Đây là nơi ta code cứng (hardcode) dữ liệu
-                  // Sau này sẽ thay bằng ListView.builder
-                  BookingCard(
-                    customerName: "Nguyễn Văn A",
-                    phone: "0901234567",
-                    studioName: "Studio Music Pro",
-                    date: "2025-10-20",
-                    time: "09:00 - 11:00",
-                    price: "500.000đ",
-                    status: BookingStatus.confirmed, // Đã xác nhận
-                  ),
-                  SizedBox(height: 16),
-                  BookingCard(
-                    customerName: "Trần Thị B",
-                    phone: "0912345678",
-                    studioName: "Studio Photo 1",
-                    date: "2025-10-20",
-                    time: "13:00 - 15:00",
-                    price: "400.000đ",
-                    status: BookingStatus.pending, // Chờ xác nhận
-                  ),
-                  SizedBox(height: 16),
-                  BookingCard(
-                    customerName: "Hoàng Văn E",
-                    phone: "0945678901",
-                    studioName: "Studio Photo 2",
-                    date: "2025-10-21",
-                    time: "19:00 - 21:00",
-                    price: "450.000đ",
-                    status: BookingStatus.cancelled, // Đã hủy
-                  ),
-                ],
-              ),
+                if (provider.state == BookingState.error) {
+                  return Center(
+                    child: Text(
+                      provider.message,
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  );
+                }
+
+                if (provider.state == BookingState.loaded &&
+                    provider.bookings.isEmpty) {
+                  return Center(child: Text("Không tìm thấy booking nào."));
+                }
+
+                // 6. Trạng thái loaded (thành công)
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: provider.bookings.length,
+                  separatorBuilder: (context, index) => SizedBox(height: 16),
+                  itemBuilder: (context, index) {
+                    // Lấy booking tại vị trí index
+                    final booking = provider.bookings[index];
+                    // Truyền object booking vào card
+                    return BookingCard(booking: booking);
+                  },
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -5,7 +5,7 @@ version: 1.0.0+1
 
 environment:
   # Đã sửa lại dải SDK cho đúng
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ^3.9.0
 
 # Đã sửa lỗi thụt lề nghiêm trọng ở đây
 dependencies:
@@ -33,12 +33,16 @@ dependencies:
   cupertino_icons: ^1.0.8
   firebase_core: ^4.2.0
 
+  google_fonts: ^6.3.2
+
+  intl: ^0.20.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   # Đã sửa lại phiên bản lints cho chuẩn hơn
-  flutter_lints: ^4.0.0
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
