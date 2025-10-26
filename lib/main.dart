@@ -105,14 +105,70 @@ class MyApp extends StatelessWidget {
         ),
 
         // 3. STUDIO - DATA & DOMAIN (Lấy từ main-origin.dart)
-        Provider<StudioRemoteDataSource>(
-          create: (context) =>
-              StudioRemoteDataSourceImpl(client: context.read<http.Client>()),
+        // Provider<StudioRemoteDataSource>(
+        //   create: (context) =>
+        //       StudioRemoteDataSourceImpl(client: context.read<http.Client>()),
+        // ),
+        // Provider<StudioRepository>(
+        //   create: (context) => StudioRepositoryImpl(
+        //     remoteDataSource: context.read<StudioRemoteDataSource>(),
+        //   ),
+        // ),
+        // 3. STUDIO - DATA & DOMAIN (ĐÃ SỬA)
+        // Sử dụng ProxyProvider2 để tiêm AuthLocalDataSource VÀ http.Client
+        ProxyProvider2<
+          AuthLocalDataSource,
+          http.Client,
+          StudioRemoteDataSource
+        >(
+          update: (context, authLocal, client, previousDataSource) {
+            // In ra để debug xem authLocal có null không
+            print("[main.dart] Creating StudioRemoteDataSource...");
+            print(
+              "[main.dart] AuthLocalDataSource is null? ${authLocal == null}",
+            );
+
+            // Nếu authLocal null, có thể provider chưa sẵn sàng, trả về cái cũ (nếu có)
+            if (authLocal == null) {
+              print(
+                "[main.dart] AuthLocalDataSource is NULL, returning previous instance.",
+              );
+              return previousDataSource ??
+                  StudioRemoteDataSourceImpl(
+                    client: client,
+                    authLocalDataSource: authLocal,
+                  ); // Cần cung cấp authLocal dù null để tránh lỗi type
+            }
+
+            print(
+              "[main.dart] AuthLocalDataSource OK. Creating new StudioRemoteDataSourceImpl.",
+            );
+            return StudioRemoteDataSourceImpl(
+              client: client,
+              authLocalDataSource: authLocal, // Tiêm dependency vào đây
+            );
+          },
         ),
-        Provider<StudioRepository>(
-          create: (context) => StudioRepositoryImpl(
-            remoteDataSource: context.read<StudioRemoteDataSource>(),
-          ),
+        ProxyProvider<StudioRemoteDataSource, StudioRepository>(
+          update: (context, remoteData, previousRepository) {
+            print("[main.dart] Creating StudioRepository...");
+            print(
+              "[main.dart] StudioRemoteDataSource is null? ${remoteData == null}",
+            );
+            if (remoteData == null) {
+              print(
+                "[main.dart] StudioRemoteDataSource is NULL, returning previous instance.",
+              );
+              return previousRepository ??
+                  StudioRepositoryImpl(
+                    remoteDataSource: remoteData,
+                  ); // Cần cung cấp remoteData dù null
+            }
+            print(
+              "[main.dart] StudioRemoteDataSource OK. Creating new StudioRepositoryImpl.",
+            );
+            return StudioRepositoryImpl(remoteDataSource: remoteData);
+          },
         ),
         // (Thêm Studio Usecase ở đây khi bạn tạo)
 

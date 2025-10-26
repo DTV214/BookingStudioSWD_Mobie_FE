@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 
 // Chúng ta giữ lại enum này vì nó rất hữu ích cho UI
-enum StudioStatus { available, maintenance }
+enum StudioStatus { available, maintenance, deleted }
 
 class Studio {
   final String id;
