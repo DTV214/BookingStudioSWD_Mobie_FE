@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:swd_mobie_flutter/features/booking/presentation/widgets/booking_detail_page.dart';
+
+// ✅ Dùng absolute import + alias 'bd'
+import 'package:swd_mobie_flutter/features/booking/presentation/widgets/booking_detail_page.dart'
+as bd;
+
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/booking_status.dart';
-// (IMPORT MỚI) Thêm import cho trang chi tiết
 
 
 class BookingCard extends StatelessWidget {
@@ -166,8 +169,7 @@ class BookingCard extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              // Truyền object 'booking' sang trang mới
-              builder: (context) => BookingDetailPage(booking: booking),
+              builder: (context) => bd.BookingDetailPage(booking: booking),
             ),
           );
         },
