@@ -30,6 +30,14 @@
           }
         },
         {
+          "client_id": "161293462080-u80q70lbjucq8j7i7eq3ts1tc3bkn8rq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.studio.swd_mobie_flutter",
+            "certificate_hash": "5add7e49c97cc4ccee44be66dd8b7323a59fb69c"
+          }
+        },
+        {
           "client_id": "161293462080-dep6kpfgddlqtnsn0d9p6uoo205lecm4.apps.googleusercontent.com",
           "client_type": 3
         }

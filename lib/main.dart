@@ -117,9 +117,12 @@ class MyApp extends StatelessWidget {
         // (Thêm Studio Usecase ở đây khi bạn tạo)
 
         // 4. BOOKING - DATA & DOMAIN (Lấy từ main-origin.dart)
+        // Trong MultiProvider -> providers:
         Provider<BookingRemoteDataSource>(
-          create: (context) =>
-              BookingRemoteDataSourceImpl(client: context.read<http.Client>()),
+          create: (context) => BookingRemoteDataSourceImpl(
+            client: context.read<http.Client>(),
+            secureStorage: context.read<FlutterSecureStorage>(), // ✅ thêm dòng này
+          ),
         ),
         Provider<BookingRepository>(
           create: (context) => BookingRepositoryImpl(
