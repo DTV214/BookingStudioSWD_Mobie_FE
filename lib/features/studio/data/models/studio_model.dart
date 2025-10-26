@@ -60,9 +60,16 @@ class StudioModel extends Studio {
       case StudioStatus.maintenance:
         statusString = 'MAINTENANCE';
         break;
+      case StudioStatus.deleted:
+        statusString = 'DELETED';
+        break;
       default:
+      print(
+          "Cảnh báo: toJson() được gọi với trạng thái không hợp lệ ($status). Gửi AVAILABLE.",
+        );
         statusString = 'AVAILABLE';
     }
+    
 
     return {
       'studioName': studioName,
@@ -90,6 +97,8 @@ class StudioModel extends Studio {
 
       case 'MAINTENANCE':
         return StudioStatus.maintenance;
+      case 'DELETED':
+        return StudioStatus.deleted;
       default:
         return StudioStatus.available;
     }

@@ -6,9 +6,7 @@ import '../../domain/entities/studio.dart';
 import '../providers/studio_provider.dart';
 
 class StudioEditPage extends StatefulWidget {
-  // Trang này nhận 1 studio cụ thể để chỉnh sửa
   final Studio studio;
-
   const StudioEditPage({super.key, required this.studio});
 
   @override
@@ -16,21 +14,16 @@ class StudioEditPage extends StatefulWidget {
 }
 
 class _StudioEditPageState extends State<StudioEditPage> {
-  // 1. Khóa Form để validation
   final _formKey = GlobalKey<FormState>();
 
-  // 2. Các TextEditingController để quản lý input
   late TextEditingController _nameController;
   late TextEditingController _descController;
   late TextEditingController _acreageController;
   late TextEditingController _startTimeController;
   late TextEditingController _endTimeController;
   late TextEditingController _imageUrlController;
-
-  // Trạng thái (status) là 1 dropdown
   late StudioStatus _selectedStatus;
-
-  // 3. Khởi tạo controller với dữ liệu từ studio
+  late StudioStatus _initialStatus;
   @override
   void initState() {
     super.initState();
@@ -42,9 +35,9 @@ class _StudioEditPageState extends State<StudioEditPage> {
     _endTimeController = TextEditingController(text: studio.endTime);
     _imageUrlController = TextEditingController(text: studio.imageUrl);
     _selectedStatus = studio.status;
+    _initialStatus = widget.studio.status;
   }
 
-  // 4. Hủy các controller khi widget bị xóa
   @override
   void dispose() {
     _nameController.dispose();
@@ -56,49 +49,92 @@ class _StudioEditPageState extends State<StudioEditPage> {
     super.dispose();
   }
 
-  // 5. Hàm xử lý khi nhấn nút "Lưu"
+  // Hàm xử lý khi nhấn nút "Lưu"
   Future<void> _saveForm() async {
-    // Kiểm tra Form có hợp lệ không
-    if (!_formKey.currentState!.validate()) {
-      return; // Nếu không hợp lệ, không làm gì cả
+    // 1. Kiểm tra xem status có thay đổi không
+    if (_selectedStatus == _initialStatus) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không có thay đổi trạng thái nào để lưu.')),
+      );
+      return; // Không làm gì nếu không đổi
     }
 
-    // Lấy provider (listen: false vì đang ở trong 1 hàm)
     final provider = context.read<StudioProvider>();
 
-    // 6. Tạo một đối tượng Studio mới với dữ liệu đã cập nhật
-    final updatedStudio = Studio(
-      id: widget.studio.id, // Giữ ID cũ
-      studioName: _nameController.text,
-      description: _descController.text,
-      acreage: double.tryParse(_acreageController.text) ?? 0.0,
-      startTime: _startTimeController.text,
-      endTime: _endTimeController.text,
-      imageUrl: _imageUrlController.text,
-      status: _selectedStatus,
-      // Các trường này chúng ta không cho sửa ở đây
-      locationName: widget.studio.locationName,
-      studioTypeName: widget.studio.studioTypeName,
+    // 2. Gọi hàm updateStudioStatus (PATCH)
+    print("Trạng thái đã thay đổi. Gọi updateStudioStatus (PATCH)...");
+    final bool success = await provider.updateStudioStatus(
+      widget.studio.id,
+      _selectedStatus,
     );
 
-    // 7. Gọi hàm saveStudio từ provider
-    final bool success = await provider.saveStudio(updatedStudio);
-
-    // 8. Xử lý kết quả (rất quan trọng)
-    if (!mounted) return; // Luôn kiểm tra "mounted" sau 1 lời gọi await
+    // 3. Xử lý kết quả
+    if (!mounted) return;
 
     if (success) {
-      // Nếu thành công:
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Cập nhật studio thành công!'),
+          content: Text('Cập nhật trạng thái thành công!'),
           backgroundColor: Colors.green,
         ),
       );
-      // Đóng trang chỉnh sửa và quay lại trang danh sách
       Navigator.of(context).pop();
     } else {
-      // Nếu thất bại:
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi cập nhật trạng thái: ${provider.errorMessage}'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
+  // --- THÊM HÀM XỬ LÝ NÚT VÔ HIỆU HÓA ---
+  Future<void> _deleteStudio() async {
+    final provider = context.read<StudioProvider>();
+
+    // 1. Hiển thị Dialog xác nhận
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Xác nhận'),
+        content: Text(
+          'Bạn có chắc chắn muốn vô hiệu hóa studio này? (Trạng thái sẽ đổi thành DELETED)',
+        ),
+        actions: [
+          TextButton(
+            child: Text('Hủy bỏ'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+          TextButton(
+            child: Text('Xác nhận', style: TextStyle(color: Colors.red)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    // 2. Nếu người dùng không xác nhận, hủy
+    if (confirmed == null || confirmed == false) {
+      return;
+    }
+
+    // 3. Nếu xác nhận, gọi API
+    final bool success = await provider.deleteStudio(widget.studio.id);
+
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã vô hiệu hóa studio thành công!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      // Đóng trang 2 lần để quay về trang danh sách
+      Navigator.of(context).pop();
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Lỗi: ${provider.errorMessage}'),
@@ -110,160 +146,145 @@ class _StudioEditPageState extends State<StudioEditPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Lắng nghe trạng thái `isSaving`
     final isSaving = context.watch<StudioProvider>().isSaving;
+    final studio = widget.studio; // Lấy studio gốc để hiển thị
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          "Chỉnh Sửa Studio",
+          "Cập nhật Trạng thái", // Đổi tiêu đề
           style: GoogleFonts.inter(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black, // Chữ và icon màu đen
+        foregroundColor: Colors.black,
         elevation: 1,
       ),
       backgroundColor: Colors.grey[50],
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildTextFormField(
-                controller: _nameController,
-                label: "Tên Studio",
-                icon: Icons.title,
-                validator: (value) =>
-                    value!.isEmpty ? "Vui lòng nhập tên studio" : null,
-              ),
-              SizedBox(height: 16),
-              _buildTextFormField(
-                controller: _descController,
-                label: "Mô tả",
-                icon: Icons.description,
-                maxLines: 4,
-              ),
-              SizedBox(height: 16),
-              _buildTextFormField(
-                controller: _imageUrlController,
-                label: "Link ảnh (Image URL)",
-                icon: Icons.image,
-                validator: (value) =>
-                    value!.isEmpty ? "Vui lòng nhập link ảnh" : null,
-              ),
-              SizedBox(height: 16),
-              _buildTextFormField(
-                controller: _acreageController,
-                label: "Diện tích (m²)",
-                icon: Icons.square_foot,
-                keyboardType: TextInputType.number,
-                validator: (value) => (double.tryParse(value!) == null)
-                    ? "Vui lòng nhập số hợp lệ"
-                    : null,
-              ),
-              SizedBox(height: 16),
-              // Trạng thái (Dropdown)
-              _buildStatusDropdown(),
-              SizedBox(height: 16),
-              // Giờ (chia 2 cột)
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTextFormField(
-                      controller: _startTimeController,
-                      label: "Giờ mở cửa (HH:mm:ss)",
-                      icon: Icons.access_time,
-                    ),
+        // Không cần Form nữa
+        // child: Form(
+        //   key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // --- BIẾN CÁC TRƯỜNG THÀNH READ-ONLY ---
+            _buildReadOnlyField(
+              label: "ID Studio",
+              value: studio.id,
+              icon: Icons.vpn_key,
+            ),
+            SizedBox(height: 16),
+            _buildReadOnlyField(
+              label: "Tên Studio",
+              value: studio.studioName,
+              icon: Icons.title,  
+            ),
+            SizedBox(height: 16),
+            _buildReadOnlyField(
+              label: "Mô tả",
+              value: studio.description,
+              icon: Icons.description,
+            ), // Cho phép hiển thị nhiều dòng
+            SizedBox(height: 16),
+            _buildReadOnlyField(
+              label: "Link ảnh",
+              value: studio.imageUrl,
+              icon: Icons.image,
+            ),
+            SizedBox(height: 16),
+            _buildReadOnlyField(
+              label: "Diện tích (m²)",
+              value: studio.acreage.toString(),
+              icon: Icons.square_foot,
+            ),
+            SizedBox(height: 16),
+            // --- GIỮ LẠI DROPDOWN STATUS ---
+            _buildStatusDropdown(),
+            SizedBox(height: 16),
+            // Giờ (Read-only)
+            Row(
+              children: [
+                Expanded(
+                  child: _buildReadOnlyField(
+                    label: "Giờ mở cửa",
+                    value: studio.startTime,
+                    icon: Icons.access_time,
                   ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: _buildTextFormField(
-                      controller: _endTimeController,
-                      label: "Giờ đóng cửa (HH:mm:ss)",
-                      icon: Icons.timer_off_outlined,
-                    ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: _buildReadOnlyField(
+                    label: "Giờ đóng cửa",
+                    value: studio.endTime,
+                    icon: Icons.timer_off_outlined,
                   ),
-                ],
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            _buildReadOnlyField(
+              label: "Địa điểm",
+              value: studio.locationName,
+              icon: Icons.location_on,
+            ),
+            SizedBox(height: 16),
+            _buildReadOnlyField(
+              label: "Loại Studio",
+              value: studio.studioTypeName,
+              icon: Icons.category,
+            ),
+            SizedBox(height: 32),
+
+            // --- SỬA LẠI NÚT LƯU ---
+            FilledButton.icon(
+              icon: isSaving ? _buildLoadingIndicator() : Icon(Icons.save),
+              label: Text(
+                isSaving ? "Đang xử lý..." : "Lưu Trạng Thái", // Đổi text nút
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              SizedBox(height: 16),
-              // Hiển thị các trường không cho sửa
-              _buildReadOnlyField(
-                label: "Địa điểm",
-                value: widget.studio.locationName,
-                icon: Icons.location_on,
+              // Vô hiệu hóa nếu đang lưu HOẶC status không đổi
+              onPressed: (isSaving || _selectedStatus == _initialStatus)
+                  ? null
+                  : _saveForm,
+              style: FilledButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                // Làm mờ nút nếu không có gì thay đổi
+                backgroundColor:
+                    (_selectedStatus == _initialStatus && !isSaving)
+                    ? Theme.of(context).primaryColor.withOpacity(0.5)
+                    : Theme.of(context).primaryColor,
               ),
-              SizedBox(height: 16),
-              _buildReadOnlyField(
-                label: "Loại Studio",
-                value: widget.studio.studioTypeName,
-                icon: Icons.category,
-              ),
-              SizedBox(height: 32),
-              // Nút "Lưu"
+            ),
+            SizedBox(height: 16),
+
+            // --- NÚT VÔ HIỆU HÓA (Giữ nguyên) ---
+            // Chỉ hiển thị nếu studio chưa bị xóa
+            if (_initialStatus != StudioStatus.deleted)
               FilledButton.icon(
                 icon: isSaving
-                    ? Container(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Icon(Icons.save),
+                    ? _buildLoadingIndicator()
+                    : Icon(Icons.delete_forever),
                 label: Text(
-                  isSaving ? "Đang lưu..." : "Lưu thay đổi",
+                  isSaving ? "Đang xử lý..." : "Vô hiệu hóa Studio",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
-                onPressed: isSaving
-                    ? null
-                    : _saveForm, // Vô hiệu hóa khi đang lưu
+                onPressed: isSaving ? null : _deleteStudio,
                 style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red[700],
+                  foregroundColor: Colors.white,
                   padding: EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
-            ],
-          ),
+          ],
         ),
+        // ), // Đóng Form
       ),
     );
   }
+  // ... (_buildTextFormField và _buildReadOnlyField giữ nguyên) ...
 
-  // Helper widget cho ô nhập liệu
-  Widget _buildTextFormField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    int maxLines = 1,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Colors.grey[600]),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        filled: true,
-        fillColor: Colors.white,
-      ),
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      validator:
-          validator ??
-          (value) {
-            if (value == null || value.isEmpty) {
-              return 'Vui lòng không để trống';
-            }
-            return null;
-          },
-    );
-  }
-
-  // Helper widget cho các trường chỉ đọc
-  Widget _buildReadOnlyField({
+Widget _buildReadOnlyField({
     required String label,
     required String value,
     required IconData icon,
@@ -278,33 +299,39 @@ class _StudioEditPageState extends State<StudioEditPage> {
         children: [
           Icon(icon, color: Colors.grey[700]),
           SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(color: Colors.grey[800], fontSize: 12),
-              ),
-              SizedBox(height: 4),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+          Expanded(
+            // <-- Vẫn cần Expanded
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(color: Colors.grey[800], fontSize: 12),
                 ),
-              ),
-            ],
+                SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                  // CẢI TIẾN: Thêm 2 dòng này
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1, // Đảm bảo chỉ hiển thị trên 1 dòng
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
-
-  // Helper widget cho ô chọn Trạng thái
+  // --- SỬA LẠI DROPDOWN ---
   Widget _buildStatusDropdown() {
     return DropdownButtonFormField<StudioStatus>(
       value: _selectedStatus,
+      // ... (decoration giữ nguyên) ...
       decoration: InputDecoration(
         labelText: "Trạng thái",
         prefixIcon: Icon(Icons.toggle_on, color: Colors.grey[600]),
@@ -312,20 +339,45 @@ class _StudioEditPageState extends State<StudioEditPage> {
         filled: true,
         fillColor: Colors.white,
       ),
-      items: StudioStatus.values.map((StudioStatus status) {
-        // Chuyển Enum thành chữ Tiếng Việt
-        String text;
-        switch (status) {
-          case StudioStatus.available:
-            text = 'Sẵn sàng';
-            break;
 
-          case StudioStatus.maintenance:
-            text = 'Bảo trì';
-            break;
-        }
-        return DropdownMenuItem<StudioStatus>(value: status, child: Text(text));
-      }).toList(),
+      // Lọc bỏ 'unknown', 'inUse', 'deleted'
+      items: StudioStatus.values
+          .where(
+            (s) => s == StudioStatus.available || s == StudioStatus.maintenance,
+          )
+          .map((StudioStatus status) {
+            // ... (code tạo Row với Icon + Text giữ nguyên) ...
+            String text;
+            IconData iconData;
+            Color color;
+            switch (status) {
+              case StudioStatus.available:
+                text = 'Sẵn sàng';
+                iconData = Icons.check_circle_outline;
+                color = Colors.green;
+                break;
+              case StudioStatus.maintenance:
+                text = 'Bảo trì';
+                iconData = Icons.build_outlined;
+                color = Colors.orange.shade800;
+                break;
+              default:
+                text = '';
+                iconData = Icons.error;
+                color = Colors.grey;
+            }
+            return DropdownMenuItem<StudioStatus>(
+              value: status,
+              child: Row(
+                children: [
+                  Icon(iconData, color: color, size: 20),
+                  SizedBox(width: 10),
+                  Text(text),
+                ],
+              ),
+            );
+          })
+          .toList(),
       onChanged: (StudioStatus? newValue) {
         if (newValue != null) {
           setState(() {
@@ -335,4 +387,13 @@ class _StudioEditPageState extends State<StudioEditPage> {
       },
     );
   }
+}
+
+// Helper widget cho vòng quay loading
+Widget _buildLoadingIndicator() {
+  return Container(
+    width: 20,
+    height: 20,
+    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+  );
 }
