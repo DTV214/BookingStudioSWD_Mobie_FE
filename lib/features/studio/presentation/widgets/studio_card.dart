@@ -97,13 +97,18 @@ class StudioCard extends StatelessWidget {
         statusColor = Colors.green;
         statusIcon = Icons.check_circle_outline;
         break;
- 
+
       case StudioStatus.maintenance:
         statusText = "Bảo trì";
         statusColor = Colors.red;
         statusIcon = Icons.build_outlined;
         break;
-    
+      case StudioStatus.deleted: // <-- THÊM MỚI
+        statusText = "Đã vô hiệu hóa";
+        statusColor = Colors.grey.shade600;
+        statusIcon = Icons.remove_circle_outline;
+        break;
+
       default:
         statusText = "Không rõ";
         statusColor = Colors.grey;
