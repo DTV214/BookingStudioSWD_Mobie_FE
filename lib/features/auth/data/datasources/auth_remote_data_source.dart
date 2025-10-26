@@ -34,9 +34,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       final String? idToken = googleAuth.idToken;
 
       if (idToken == null) {
-        throw GoogleSignInException(
-          'Failed to get ID Token from Google.',
-        );
+        throw GoogleSignInException('Failed to get ID Token from Google.');
       }
 
       // 3. Gọi API Spring Boot của bạn
@@ -53,6 +51,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       // 4. Xử lý kết quả
       if (response.statusCode == 200) {
         final jsonResponse = json.decode(response.body);
+        print('✅ Response Body từ Backend: $jsonResponse');
+        print('✅ Token (JWT): ${jsonResponse["data"]}');
         return TokenModel.fromJson(jsonResponse);
       } else {
         throw ServerException(
