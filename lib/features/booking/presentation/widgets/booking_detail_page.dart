@@ -20,6 +20,13 @@ import '../../../booking/data/datasources/service_assign_remote_data_source_impl
 // ==== SECTION PAYMENT (mới, Clean Architecture) ====
 import 'payment_section.dart';
 
+// ==== Final Payment (Clean) ====
+import '../../domain/usecases/create_final_payment_usecase.dart';
+import '../../presentation/providers/final_payment_provider.dart';
+import '../../domain/repositories/payment_repository.dart';
+import '../../data/datasources/payment_remote_data_source_impl.dart';
+import '../../data/repositories/payment_repository_impl.dart';
+
 // ==== Cấu hình chung ====
 const _baseUrl = 'https://bookingstudioswd-be.onrender.com';
 const _cachedTokenKey = 'CACHED_TOKEN';
@@ -83,7 +90,10 @@ class BookingDetailPage extends StatefulWidget {
 
 class _BookingDetailPageState extends State<BookingDetailPage> {
   late Future<List<_AssignItem>> _futureAssigns;
-  int _reloadTick = 0; // ép rebuild PaymentSection sau khi về từ trang con
+  int _reloadTick = 0; // ép rebuild PaymentSection sau khi back/tạo final
+
+  // chọn method cho Final Payment (mặc định VNPAY)
+  String _finalMethod = 'VNPAY';
 
   @override
   void initState() {
@@ -120,12 +130,12 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
         throw Exception('HTTP ${resp.statusCode}');
       }
 
-      // JSON guard (tránh parse HTML Swagger)
+      // JSON guard
       final contentType = (resp.headers['content-type'] ?? '').toLowerCase();
       final bodyStart = resp.body.trimLeft();
       final looksLikeHtml = bodyStart.startsWith('<!DOCTYPE') || bodyStart.startsWith('<html');
       if (!contentType.contains('application/json') || looksLikeHtml) {
-        debugPrint('[Assigns] Not JSON content (Swagger/HTML).');
+        debugPrint('[Assigns] Not JSON content.');
         throw Exception('Non-JSON content');
       }
 
@@ -168,23 +178,163 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
             const SizedBox(height: 16),
             _buildBookingInfoCard(context),
             const SizedBox(height: 16),
-            _buildAssignsSection(context), // ✅ Khu vực Assigns
+            _buildAssignsSection(context),
             const SizedBox(height: 16),
 
-            // (GIỮ NGUYÊN) Section thanh toán cũ
+            // CŨ (giữ cho tương thích UI cũ)
             _buildPaymentSection(context),
-
             const SizedBox(height: 16),
 
-            // (MỚI) Section thanh toán Clean Architecture — list payments thực từ API
+            // MỚI: Tạo Final Payment
+            _buildFinalPaymentCreator(context),
+            const SizedBox(height: 16),
+
+            // Danh sách payment thực
             PaymentSection(
-              key: ValueKey(_reloadTick), // ép rebuild khi quay về từ trang con
+              key: ValueKey(_reloadTick),
               bookingId: widget.booking.id,
             ),
           ],
         ),
       ),
     );
+  }
+
+  // ====== Final Payment Card ======
+  Widget _buildFinalPaymentCreator(BuildContext context) {
+    // Local DI
+    final remote = PaymentRemoteDataSourceImpl(
+      client: http.Client(),
+      secureStorage: const FlutterSecureStorage(),
+    );
+    final PaymentRepository repo = PaymentRepositoryImpl(remote: remote);
+    final usecase = CreateFinalPaymentUsecase(repo);
+
+    return ChangeNotifierProvider<FinalPaymentProvider>(
+      create: (_) => FinalPaymentProvider(usecase: usecase),
+      child: Consumer<FinalPaymentProvider>(
+        builder: (_, prov, __) {
+          final isLoading = prov.state == FinalPaymentState.loading;
+          final hasResult = prov.state == FinalPaymentState.success && prov.finalPayment != null;
+          final fp = prov.finalPayment;
+
+          return Card(
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Tạo thanh toán cuối (Final Payment)",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const Divider(height: 24),
+
+                  Row(
+                    children: [
+                      const Icon(Icons.payment_outlined, size: 20, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: _finalMethod,
+                          decoration: const InputDecoration(
+                            labelText: 'Phương thức',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'VNPAY', child: Text('VNPay')),
+                            DropdownMenuItem(value: 'MOMO', child: Text('MoMo')),
+                            DropdownMenuItem(value: 'CASH', child: Text('Tiền mặt')),
+                          ],
+                          onChanged: isLoading ? null : (v) {
+                            if (v != null) setState(() => _finalMethod = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        icon: isLoading
+                            ? const SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                            : const Icon(Icons.add_card_outlined),
+                        label: Text(isLoading ? 'Đang tạo...' : 'Tạo Final'),
+                        onPressed: isLoading ? null : () async {
+                          await prov.create(
+                            bookingId: widget.booking.id,
+                            paymentMethod: _finalMethod,
+                          );
+                          if (!mounted) return;
+
+                          if (prov.state == FinalPaymentState.success) {
+                            setState(() {
+                              _reloadTick++; // reload list payments
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã tạo thanh toán cuối.')),
+                            );
+                          } else if (prov.state == FinalPaymentState.error) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(prov.message)),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+
+                  if (prov.state == FinalPaymentState.error) ...[
+                    const SizedBox(height: 12),
+                    Text(prov.message, style: const TextStyle(color: Colors.red)),
+                  ],
+
+                  if (hasResult) ...[
+                    const SizedBox(height: 16),
+                    const Divider(height: 16),
+                    _buildInfoRow(
+                      Icons.monetization_on_outlined,
+                      'Số tiền còn thiếu: ${NumberFormat.currency(locale: "vi_VN", symbol: "đ").format(fp!.amountDue)}',
+                    ),
+                    const SizedBox(height: 6),
+                    _buildInfoRow(Icons.account_balance_wallet_outlined, 'Phương thức: ${_displayMethod(fp.paymentMethod)}'),
+                    const SizedBox(height: 6),
+                    _buildInfoRow(Icons.info_outline, 'Trạng thái tạo: ${_displayPaymentStatus(fp.status)}'),
+                    if (fp.paymentUrl != null && fp.paymentUrl!.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _buildInfoRow(Icons.link, 'Liên kết thanh toán: ${fp.paymentUrl}'),
+                      // Có thể dùng url_launcher để mở link
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _displayMethod(String raw) {
+    switch (raw.toLowerCase()) {
+      case 'vnpay': return 'VNPay';
+      case 'momo':  return 'MoMo';
+      case 'cash':  return 'Tiền mặt';
+      default:      return raw.toUpperCase();
+    }
+  }
+
+  String _displayPaymentStatus(String raw) {
+    switch (raw.toUpperCase()) {
+      case 'PENDING': return 'Chờ xử lý';
+      case 'SUCCESS': return 'Thành công';
+      case 'FAILED':  return 'Thất bại';
+      default:        return raw;
+    }
   }
 
   // ====== UI cũ giữ nguyên ======
@@ -354,7 +504,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                         final repo = ServiceAssignRepositoryImpl(remote: remote);
                         final usecase = GetServiceAssignsByStudioAssign(repo);
 
-                        // ✅ Gói toàn bộ thông tin assign để mang sang trang chi tiết
+                        // Gói thông tin assign
                         final assignSummary = AssignSummary(
                           id: it.id,
                           bookingId: it.bookingId,
@@ -377,17 +527,16 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                               create: (_) => ServiceAssignProvider(getUsecase: usecase),
                               child: ServiceAssignPage(
                                 studioAssignId: it.id,
-                                assign: assignSummary, // ✅ truyền full thông tin
+                                assign: assignSummary,
                               ),
                             ),
                           ),
                         );
 
-                        // Nếu trang con báo có thay đổi, reload lại
                         if (changed == true && mounted) {
                           setState(() {
-                            _futureAssigns = _fetchAssigns(widget.booking.id); // reload assigns
-                            _reloadTick++;                                     // ép reload PaymentSection
+                            _futureAssigns = _fetchAssigns(widget.booking.id);
+                            _reloadTick++; // ép reload PaymentSection
                           });
                         }
                       },
