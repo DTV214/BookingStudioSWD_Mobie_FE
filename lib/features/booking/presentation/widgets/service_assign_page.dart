@@ -1,8 +1,10 @@
 // lib/features/booking/presentation/widgets/service_assign_page.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+// Service-assign list (items bên dưới assign)
 import '../providers/service_assign_provider.dart';
 import '../../domain/entities/service_assign.dart';
 
@@ -13,10 +15,18 @@ import '../../domain/repositories/studio_assign_repository.dart';
 import '../../../booking/data/datasources/studio_assign_remote_data_source_impl.dart';
 import '../../../booking/data/repositories/studio_assign_repository_impl.dart';
 
+// ==== Provider + Usecase cho addition-time ====
+import '../providers/addition_time_provider.dart';
+import '../../domain/usecases/add_studio_assign_addition_time_usecase.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Tóm tắt đầy đủ một studio-assign (booking_assign) để mang sang trang chi tiết.
+/// === Cấu hình chung (token & baseUrl) ===
+const _baseUrl = 'https://bookingstudioswd-be.onrender.com';
+const _cachedTokenKey = 'CACHED_TOKEN';
+
+/// Tóm tắt đầy đủ một studio-assign để mang sang trang chi tiết.
 class AssignSummary {
   final String id;
   final String bookingId;
@@ -47,20 +57,29 @@ class AssignSummary {
     required this.updatedAmount,
   });
 
-  AssignSummary copyWith({String? status}) {
+  AssignSummary copyWith({
+    String? status,
+    int? additionTime,
+    DateTime? endTime,
+    int? updatedAmount,
+    String? studioName,
+    String? locationName,
+    int? studioAmount,
+    int? serviceAmount,
+  }) {
     return AssignSummary(
       id: id,
       bookingId: bookingId,
       studioId: studioId,
-      studioName: studioName,
-      locationName: locationName,
+      studioName: studioName ?? this.studioName,
+      locationName: locationName ?? this.locationName,
       startTime: startTime,
-      endTime: endTime,
-      studioAmount: studioAmount,
-      serviceAmount: serviceAmount,
-      additionTime: additionTime,
+      endTime: endTime ?? this.endTime,
+      studioAmount: studioAmount ?? this.studioAmount,
+      serviceAmount: serviceAmount ?? this.serviceAmount,
+      additionTime: additionTime ?? this.additionTime,
       status: status ?? this.status,
-      updatedAmount: updatedAmount,
+      updatedAmount: updatedAmount ?? this.updatedAmount,
     );
   }
 }
@@ -84,6 +103,9 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
   String? _selectedStatus;
   bool _dirty = false; // nếu có thay đổi sẽ trả true khi back
 
+  // Input cho addition-time
+  final TextEditingController _minutesCtrl = TextEditingController(text: '15');
+
   // ENUM hợp lệ theo API
   static const List<String> kStatuses = <String>[
     'COMING_SOON',
@@ -100,11 +122,99 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
     _selectedStatus = widget.assign.status;
 
     // Gọi fetch service-assign 1 lần sau frame đầu
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<ServiceAssignProvider>();
       if (prov.state == ServiceAssignState.initial) {
-        prov.fetch(widget.studioAssignId);
+        await prov.fetch(widget.studioAssignId);
       }
+      // Đồng thời reload header assign từ server để đồng bộ (trường hợp vào từ cache)
+      await _reloadAssignFromServer();
+    });
+  }
+
+  @override
+  void dispose() {
+    _minutesCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Lấy JWT từ SecureStorage
+  Future<String> _getJwt() async {
+    final storage = const FlutterSecureStorage();
+    final jsonString = await storage.read(key: _cachedTokenKey);
+    if (jsonString == null) throw Exception('No cached token');
+    final map = json.decode(jsonString);
+    final raw = map['data'] ?? map['jwt'];
+    if (raw is String && raw.isNotEmpty) return raw;
+    throw Exception('Invalid token structure');
+  }
+
+  /// Reload assign header (studioName, times, amounts, status, updatedAmount, additionTime, ...)
+  /// Cách làm: GET /api/studio-assigns/booking/{bookingId} => tìm item có id == studioAssignId
+  Future<void> _reloadAssignFromServer() async {
+    try {
+      final jwt = await _getJwt();
+      final url = Uri.parse('$_baseUrl/api/studio-assigns/booking/${_assign.bookingId}');
+      final resp = await http.get(url, headers: {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $jwt',
+      });
+
+      if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+
+      final contentType = (resp.headers['content-type'] ?? '').toLowerCase();
+      final bodyStart = resp.body.trimLeft();
+      final looksLikeHtml = bodyStart.startsWith('<!DOCTYPE') || bodyStart.startsWith('<html');
+      if (!contentType.contains('application/json') || looksLikeHtml) {
+        throw Exception('Non-JSON content');
+      }
+
+      final Map<String, dynamic> jsonResponse = json.decode(resp.body);
+      final data = jsonResponse['data'];
+      if (data is! List) throw Exception('Invalid data');
+
+      final found = data.cast<Map<String, dynamic>>().firstWhere(
+            (e) => (e['id'] as String) == widget.studioAssignId,
+        orElse: () => {},
+      );
+      if (found.isEmpty) return;
+
+      final refreshed = AssignSummary(
+        id: found['id'],
+        bookingId: found['bookingId'],
+        studioId: found['studioId'],
+        studioName: found['studioName'],
+        locationName: found['locationName'],
+        startTime: DateTime.parse(found['startTime']),
+        endTime: DateTime.parse(found['endTime']),
+        studioAmount: (found['studioAmount'] as num).toInt(),
+        serviceAmount: (found['serviceAmount'] as num).toInt(),
+        additionTime: found['additionTime'] == null ? null : (found['additionTime'] as num).toInt(),
+        status: found['status'],
+        updatedAmount: found['updatedAmount'] == null ? null : (found['updatedAmount'] as num).toInt(),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _assign = refreshed;
+        _selectedStatus = refreshed.status;
+      });
+    } catch (_) {
+      // Có thể hiển thị snack nếu cần
+    }
+  }
+
+  /// Sau mỗi action thành công:
+  /// - Reload header assign
+  /// - Gọi lại provider.fetch để refresh danh sách service-assign
+  Future<void> _refreshAllAfterAction() async {
+    await _reloadAssignFromServer();
+    try {
+      await context.read<ServiceAssignProvider>().fetch(widget.studioAssignId);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _dirty = true; // đánh dấu có thay đổi để trang trước reload
     });
   }
 
@@ -116,16 +226,31 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
         Navigator.pop(context, _dirty);
         return false;
       },
-      child: ChangeNotifierProvider<StudioAssignStatusProvider>(
-        create: (_) {
-          final remote = StudioAssignRemoteDataSourceImpl(
-            client: http.Client(),
-            secureStorage: const FlutterSecureStorage(),
-          );
-          final StudioAssignRepository repo = StudioAssignRepositoryImpl(remote: remote);
-          final usecase = SetStudioAssignStatusUsecase(repo);
-          return StudioAssignStatusProvider(setStatusUsecase: usecase);
-        },
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<StudioAssignStatusProvider>(
+            create: (_) {
+              final remote = StudioAssignRemoteDataSourceImpl(
+                client: http.Client(),
+                secureStorage: const FlutterSecureStorage(),
+              );
+              final StudioAssignRepository repo = StudioAssignRepositoryImpl(remote: remote);
+              final setStatusUsecase = SetStudioAssignStatusUsecase(repo);
+              return StudioAssignStatusProvider(setStatusUsecase: setStatusUsecase);
+            },
+          ),
+          ChangeNotifierProvider<AdditionTimeProvider>(
+            create: (_) {
+              final remote = StudioAssignRemoteDataSourceImpl(
+                client: http.Client(),
+                secureStorage: const FlutterSecureStorage(),
+              );
+              final StudioAssignRepository repo = StudioAssignRepositoryImpl(remote: remote);
+              final addTimeUsecase = AddStudioAssignAdditionTimeUsecase(repo);
+              return AdditionTimeProvider(usecase: addTimeUsecase);
+            },
+          ),
+        ],
         child: Scaffold(
           backgroundColor: const Color(0xFFF4F6F9),
           appBar: AppBar(
@@ -135,10 +260,21 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
             foregroundColor: Colors.black,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                Navigator.pop(context, _dirty);
-              },
+              onPressed: () => Navigator.pop(context, _dirty),
             ),
+            actions: [
+              IconButton(
+                tooltip: 'Làm mới',
+                icon: const Icon(Icons.refresh),
+                onPressed: () async {
+                  await _refreshAllAfterAction();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã tải lại dữ liệu.')),
+                  );
+                },
+              ),
+            ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -157,10 +293,8 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
                             '${DateFormat('dd/MM/yyyy HH:mm').format(_assign.startTime)} → ${DateFormat('dd/MM/yyyy HH:mm').format(_assign.endTime)}';
                         final total = _assign.studioAmount + _assign.serviceAmount;
                         final totalStr = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(total);
-                        final studioStr =
-                        NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(_assign.studioAmount);
-                        final serviceStr =
-                        NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(_assign.serviceAmount);
+                        final studioStr = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(_assign.studioAmount);
+                        final serviceStr = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(_assign.serviceAmount);
                         final updatedStr = _assign.updatedAmount == null
                             ? null
                             : NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(_assign.updatedAmount);
@@ -183,8 +317,7 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration:
-                                  BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(6)),
+                                  decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(6)),
                                   child: Text(
                                     badgeText,
                                     style: TextStyle(
@@ -208,6 +341,9 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
                             _row(Icons.design_services_outlined, 'Dịch vụ: $serviceStr'),
                             const SizedBox(height: 6),
                             if (updatedStr != null) _row(Icons.price_change_outlined, 'Bổ sung: $updatedStr'),
+                            const SizedBox(height: 6),
+                            if (_assign.additionTime != null)
+                              _row(Icons.alarm_add_outlined, 'Tổng phút bổ sung: ${_assign.additionTime} phút'),
                             const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -240,9 +376,7 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
                                     onChanged: statusProv.state == StudioAssignStatusState.loading
                                         ? null
                                         : (v) {
-                                      setState(() {
-                                        _selectedStatus = v;
-                                      });
+                                      setState(() => _selectedStatus = v);
                                     },
                                   ),
                                 ),
@@ -250,7 +384,7 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
                             ),
                             const SizedBox(height: 12),
 
-                            // Button cập nhật
+                            // Button cập nhật trạng thái
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
@@ -279,10 +413,7 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
                                   if (!mounted) return;
 
                                   if (statusProv.state == StudioAssignStatusState.success) {
-                                    setState(() {
-                                      _assign = _assign.copyWith(status: _selectedStatus);
-                                      _dirty = true; // đánh dấu có thay đổi
-                                    });
+                                    await _refreshAllAfterAction(); // <— reload tất cả
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text('Đã cập nhật trạng thái thành công.')),
                                     );
@@ -300,6 +431,112 @@ class _ServiceAssignPageState extends State<ServiceAssignPage> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+
+                // ===== Card: Thêm thời gian bổ sung =====
+                Card(
+                  elevation: 0,
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Consumer<AdditionTimeProvider>(
+                      builder: (_, addProv, __) {
+                        final loading = addProv.state == AdditionTimeState.loading;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Thời gian bổ sung',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                const Icon(Icons.timer_outlined, size: 20, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _minutesCtrl,
+                                    keyboardType: TextInputType.number,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Số phút bổ sung',
+                                      hintText: 'VD: 15',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                ElevatedButton.icon(
+                                  icon: loading
+                                      ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                      : const Icon(Icons.add_alarm_outlined),
+                                  label: Text(loading ? 'Đang thêm...' : 'Thêm thời gian'),
+                                  onPressed: loading
+                                      ? null
+                                      : () async {
+                                    final raw = _minutesCtrl.text.trim();
+                                    final minutes = int.tryParse(raw) ?? 0;
+                                    if (minutes < 0) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Vui lòng nhập số phút >= 0')),
+                                      );
+                                      return;
+                                    }
+
+                                    await addProv.add(
+                                      assignId: widget.studioAssignId,
+                                      additionMinutes: minutes,
+                                    );
+
+                                    if (!mounted) return;
+
+                                    if (addProv.state == AdditionTimeState.success && addProv.result != null) {
+                                      // Reload từ server để đảm bảo đồng bộ mọi field liên quan (endTime/updatedAmount/...)
+                                      await _refreshAllAfterAction(); // <— reload tất cả
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Đã thêm thời gian bổ sung.')),
+                                      );
+                                    } else if (addProv.state == AdditionTimeState.error) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text(addProv.message)),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            if (addProv.state == AdditionTimeState.error) ...[
+                              const SizedBox(height: 8),
+                              Text(addProv.message, style: const TextStyle(color: Colors.red)),
+                            ],
+                            if (addProv.state == AdditionTimeState.success && addProv.result != null) ...[
+                              const Divider(height: 24),
+                              if (addProv.result!.additionTime != null)
+                                _row(Icons.alarm_add_outlined,
+                                    'Tổng phút bổ sung: ${addProv.result!.additionTime} phút'),
+                              if (addProv.result!.endTime != null)
+                                _row(Icons.schedule,
+                                    'Giờ kết thúc mới: ${DateFormat('dd/MM/yyyy HH:mm').format(addProv.result!.endTime!)}'),
+                              if (addProv.result!.updatedAmount != null)
+                                _row(
+                                  Icons.price_change_outlined,
+                                  'Bổ sung: ${NumberFormat.currency(locale: "vi_VN", symbol: "đ").format(addProv.result!.updatedAmount)}',
+                                ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 12),
 
                 // ===== Danh sách Service Assign (Provider sẵn có) =====

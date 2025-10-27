@@ -1,4 +1,3 @@
-// lib/features/booking/presentation/widgets/payment_section.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -45,9 +44,18 @@ class PaymentSection extends StatelessWidget {
             return _card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Không tải được thanh toán: ${provider.message}',
-                  style: const TextStyle(color: Colors.red),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _header(context, onRefresh: () {
+                      provider.fetch(bookingId);
+                    }),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Không tải được thanh toán: ${provider.message}',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -60,13 +68,9 @@ class PaymentSection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "Danh sách Thanh toán",
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
+                  _header(context, onRefresh: () {
+                    provider.fetch(bookingId);
+                  }),
                   const Divider(height: 24),
                   if (payments.isEmpty)
                     const Text('Chưa có thanh toán cho lịch đặt này.')
@@ -75,15 +79,15 @@ class PaymentSection extends StatelessWidget {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: payments.length,
-                      separatorBuilder: (_, __) =>
-                      const SizedBox(height: 12),
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final p = payments[index];
 
                         // Format
                         final amountStr = NumberFormat.currency(
-                            locale: 'vi_VN', symbol: 'đ')
-                            .format(p.amount);
+                          locale: 'vi_VN',
+                          symbol: 'đ',
+                        ).format(p.amount);
                         final dateStr = DateFormat('dd/MM/yyyy HH:mm')
                             .format(p.paymentDate);
 
@@ -119,7 +123,8 @@ class PaymentSection extends StatelessWidget {
                                     ),
                                     child: Row(
                                       children: [
-                                        Icon(methodIcon, size: 16, color: methodFg),
+                                        Icon(methodIcon,
+                                            size: 16, color: methodFg),
                                         const SizedBox(width: 6),
                                         Text(
                                           methodLabel,
@@ -178,6 +183,25 @@ class PaymentSection extends StatelessWidget {
   }
 
   // ------------ Helpers UI ------------
+  static Widget _header(BuildContext context, {required VoidCallback onRefresh}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          "Danh sách Thanh toán",
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        IconButton(
+          tooltip: 'Tải lại',
+          icon: const Icon(Icons.refresh),
+          onPressed: onRefresh,
+        ),
+      ],
+    );
+  }
 
   static Widget _card({required Widget child}) {
     return Card(

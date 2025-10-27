@@ -90,6 +90,10 @@ class BookingDetailPage extends StatefulWidget {
 
 class _BookingDetailPageState extends State<BookingDetailPage> {
   late Future<List<_AssignItem>> _futureAssigns;
+
+  /// Tổng tiền hiện tại được tính từ assigns mới nhất
+  int _currentTotal = 0;
+
   int _reloadTick = 0; // ép rebuild PaymentSection sau khi back/tạo final
 
   // chọn method cho Final Payment (mặc định VNPAY)
@@ -98,7 +102,27 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   @override
   void initState() {
     super.initState();
+    // Khởi tạo _currentTotal bằng total ban đầu (để có giá trị hiển thị trước)
+    _currentTotal = widget.booking.total;
     _futureAssigns = _fetchAssigns(widget.booking.id);
+  }
+
+  Future<void> _refreshAll() async {
+    setState(() {
+      _futureAssigns = _fetchAssigns(widget.booking.id);
+      _reloadTick++; // ép PaymentSection reload
+    });
+  }
+
+  int _calcTotalFromAssigns(List<_AssignItem> items) {
+    // Tổng = sum(studioAmount + serviceAmount + (updatedAmount?))
+    int sum = 0;
+    for (final it in items) {
+      sum += it.studioAmount;
+      sum += it.serviceAmount;
+      if (it.updatedAmount != null) sum += it.updatedAmount!;
+    }
+    return sum;
   }
 
   // ==== Fetch assigns theo bookingId, dùng Bearer JWT từ SecureStorage ====
@@ -149,7 +173,15 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
       final items = data
           .map<_AssignItem>((e) => _AssignItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      debugPrint('[Assigns] Parsed ${items.length} assigns.');
+
+      // ✅ Cập nhật _currentTotal ngay theo assigns mới nhất
+      if (mounted) {
+        setState(() {
+          _currentTotal = items.isEmpty ? widget.booking.total : _calcTotalFromAssigns(items);
+        });
+      }
+
+      debugPrint('[Assigns] Parsed ${items.length} assigns. Total=$_currentTotal');
       return items;
     } catch (e) {
       debugPrint('[Assigns] Unknown error: $e');
@@ -168,33 +200,44 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
+        actions: [
+          IconButton(
+            tooltip: 'Tải lại',
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshAll,
+          )
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildCustomerCard(context),
-            const SizedBox(height: 16),
-            _buildBookingInfoCard(context),
-            const SizedBox(height: 16),
-            _buildAssignsSection(context),
-            const SizedBox(height: 16),
+      body: RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildCustomerCard(context),
+              const SizedBox(height: 16),
+              _buildBookingInfoCard(context),
+              const SizedBox(height: 16),
+              _buildAssignsSection(context),
+              const SizedBox(height: 16),
 
-            // CŨ (giữ cho tương thích UI cũ)
-            _buildPaymentSection(context),
-            const SizedBox(height: 16),
+              // CŨ (giữ cho tương thích UI cũ)
+              _buildPaymentSection(context),
+              const SizedBox(height: 16),
 
-            // MỚI: Tạo Final Payment
-            _buildFinalPaymentCreator(context),
-            const SizedBox(height: 16),
+              // MỚI: Tạo Final Payment
+              _buildFinalPaymentCreator(context),
+              const SizedBox(height: 16),
 
-            // Danh sách payment thực
-            PaymentSection(
-              key: ValueKey(_reloadTick),
-              bookingId: widget.booking.id,
-            ),
-          ],
+              // Danh sách payment thực
+              PaymentSection(
+                key: ValueKey(_reloadTick),
+                bookingId: widget.booking.id,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -272,9 +315,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                           if (!mounted) return;
 
                           if (prov.state == FinalPaymentState.success) {
-                            setState(() {
-                              _reloadTick++; // reload list payments
-                            });
+                            await _refreshAll(); // ✅ tạo xong -> reload luôn (assigns + payments)
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Đã tạo thanh toán cuối.')),
                             );
@@ -307,7 +348,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                     if (fp.paymentUrl != null && fp.paymentUrl!.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       _buildInfoRow(Icons.link, 'Liên kết thanh toán: ${fp.paymentUrl}'),
-                      // Có thể dùng url_launcher để mở link
                     ],
                   ],
                 ],
@@ -338,7 +378,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   }
 
   // ====== UI cũ giữ nguyên ======
-
   Widget _buildCustomerCard(BuildContext context) {
     return Card(
       elevation: 0,
@@ -491,7 +530,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                     final timeRange =
                         '${DateFormat('dd/MM/yyyy HH:mm').format(it.startTime)} → ${DateFormat('dd/MM/yyyy HH:mm').format(it.endTime)}';
                     final price = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ')
-                        .format(it.studioAmount + it.serviceAmount);
+                        .format(it.studioAmount + it.serviceAmount + (it.updatedAmount ?? 0));
                     final (badgeColor, badgeBg, badgeText) = _statusStyle(it.status);
 
                     return InkWell(
@@ -534,10 +573,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                         );
 
                         if (changed == true && mounted) {
-                          setState(() {
-                            _futureAssigns = _fetchAssigns(widget.booking.id);
-                            _reloadTick++; // ép reload PaymentSection
-                          });
+                          await _refreshAll(); // ✅ quay về có thay đổi → reload tất cả (assigns + tổng tiền + payments)
                         }
                       },
                       child: Container(
@@ -617,9 +653,9 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     }
   }
 
-  // (GIỮ NGUYÊN) Section thanh toán cũ
+  // (GIỮ NGUYÊN) Section thanh toán cũ — nhưng nguồn số tiền dùng _currentTotal (đã cập nhật)
   Widget _buildPaymentSection(BuildContext context) {
-    final priceString = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(widget.booking.total);
+    final priceString = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(_currentTotal);
 
     return Card(
       elevation: 0,
