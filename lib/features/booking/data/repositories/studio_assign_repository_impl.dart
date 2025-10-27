@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+
 import '../../../../core/error/exception.dart';
 import '../../../../core/error/failure.dart';
 import '../../domain/entities/studio_assign.dart';
@@ -15,6 +16,23 @@ class StudioAssignRepositoryImpl implements StudioAssignRepository {
     try {
       final list = await remote.getByBookingId(bookingId);
       return Right(list);
+    } on NetworkException {
+      return Left(NetworkFailure());
+    } on ServerException {
+      return Left(ServerFailure());
+    } catch (_) {
+      return Left(ServerFailure());
+    }
+  }
+
+  @override
+  Future<Either<Failure, Unit>> setStatus({
+    required String assignId,
+    required String status,
+  }) async {
+    try {
+      await remote.setStatus(assignId: assignId, status: status);
+      return const Right(unit);
     } on NetworkException {
       return Left(NetworkFailure());
     } on ServerException {

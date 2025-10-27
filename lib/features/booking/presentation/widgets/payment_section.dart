@@ -1,3 +1,4 @@
+// lib/features/booking/presentation/widgets/payment_section.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -32,25 +33,16 @@ class PaymentSection extends StatelessWidget {
         builder: (context, provider, _) {
           if (provider.state == PaymentState.loading ||
               provider.state == PaymentState.initial) {
-            return Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+            return _card(
               child: const Padding(
                 padding: EdgeInsets.all(16),
-                child:
-                Center(child: CircularProgressIndicator()),
+                child: Center(child: CircularProgressIndicator()),
               ),
             );
           }
 
           if (provider.state == PaymentState.error) {
-            return Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+            return _card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
@@ -62,11 +54,7 @@ class PaymentSection extends StatelessWidget {
           }
 
           final payments = provider.payments;
-          return Card(
-            elevation: 0,
-            color: Colors.white,
-            shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          return _card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -91,47 +79,70 @@ class PaymentSection extends StatelessWidget {
                       const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final p = payments[index];
+
+                        // Format
                         final amountStr = NumberFormat.currency(
                             locale: 'vi_VN', symbol: 'đ')
                             .format(p.amount);
                         final dateStr = DateFormat('dd/MM/yyyy HH:mm')
                             .format(p.paymentDate);
-                        final (color, bg, label) = _statusStyle(p.status);
+
+                        // Status badge
+                        final (statusColor, statusBg, statusLabel) =
+                        _statusStyle(p.status);
+
+                        // Method chip + icon
+                        final (methodIcon, methodLabel, methodBg, methodFg) =
+                        _methodStyle(p.paymentMethod);
 
                         return Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(10),
-                            border:
-                            Border.all(color: Colors.grey.shade200),
+                            border: Border.all(color: Colors.grey.shade200),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Header: method + status
+                              // Header: method chip + status badge
                               Row(
                                 mainAxisAlignment:
                                 MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    p.paymentMethod,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 15),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: methodBg,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(methodIcon, size: 16, color: methodFg),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          methodLabel,
+                                          style: TextStyle(
+                                            color: methodFg,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: bg,
-                                      borderRadius:
-                                      BorderRadius.circular(6),
+                                      color: statusBg,
+                                      borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      label,
+                                      statusLabel,
                                       style: TextStyle(
-                                        color: color,
+                                        color: statusColor,
                                         fontWeight: FontWeight.w600,
                                         fontSize: 12,
                                       ),
@@ -139,7 +150,8 @@ class PaymentSection extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+
+                              const SizedBox(height: 10),
                               _row(Icons.category_outlined,
                                   'Loại thanh toán: ${p.paymentType}'),
                               const SizedBox(height: 6),
@@ -165,6 +177,17 @@ class PaymentSection extends StatelessWidget {
     );
   }
 
+  // ------------ Helpers UI ------------
+
+  static Widget _card({required Widget child}) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: child,
+    );
+  }
+
   static (Color, Color, String) _statusStyle(String status) {
     switch (status) {
       case 'PENDING':
@@ -178,10 +201,30 @@ class PaymentSection extends StatelessWidget {
     }
   }
 
+  /// Trả về (icon, label, bgColor, fgColor) theo method từ API:
+  ///  - VNPAY("vnpay"), MOMO("momo"), CASH("cash")
+  static (IconData, String, Color, Color) _methodStyle(String methodRaw) {
+    final m = (methodRaw).toLowerCase().trim();
+    switch (m) {
+      case 'vnpay':
+        return (Icons.account_balance_wallet_outlined, 'VNPay',
+        Colors.blue.shade50, Colors.blue);
+      case 'momo':
+        return (Icons.phone_iphone, 'MoMo',
+        Colors.pink.shade50, Colors.pink);
+      case 'cash':
+        return (Icons.payments_outlined, 'Tiền mặt',
+        Colors.green.shade50, Colors.green);
+      default:
+        return (Icons.payment, methodRaw.toUpperCase(),
+        Colors.grey.shade200, Colors.grey[800]!);
+    }
+  }
+
   Widget _row(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, color: Colors.grey[600], size: 18),
+        Icon(icon, color: Colors.grey[700], size: 18),
         const SizedBox(width: 8),
         Expanded(child: Text(text)),
       ],

@@ -36,7 +36,7 @@ class _AssignItem {
   final int studioAmount;
   final int serviceAmount;
   final int? additionTime; // có thể null
-  final String status; // COMING_SOON / IN_PROGRESS / ENDED ...
+  final String status; // COMING_SOON / IS_HAPPENING / IN_PROGRESS / ENDED ...
   final int? updatedAmount;
 
   _AssignItem({
@@ -83,6 +83,7 @@ class BookingDetailPage extends StatefulWidget {
 
 class _BookingDetailPageState extends State<BookingDetailPage> {
   late Future<List<_AssignItem>> _futureAssigns;
+  int _reloadTick = 0; // ép rebuild PaymentSection sau khi về từ trang con
 
   @override
   void initState() {
@@ -176,7 +177,10 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
             const SizedBox(height: 16),
 
             // (MỚI) Section thanh toán Clean Architecture — list payments thực từ API
-            PaymentSection(bookingId: widget.booking.id),
+            PaymentSection(
+              key: ValueKey(_reloadTick), // ép rebuild khi quay về từ trang con
+              bookingId: widget.booking.id,
+            ),
           ],
         ),
       ),
@@ -213,17 +217,21 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     Color statusColor;
     String statusText;
     switch (widget.booking.status) {
-      case BookingStatus.pending:
-        statusColor = Colors.orange;
-        statusText = "Chờ xác nhận";
+      case BookingStatus.inProgress:
+        statusColor = Colors.blue;
+        statusText = "Đang thực hiện";
         break;
-      case BookingStatus.confirmed:
+      case BookingStatus.completed:
         statusColor = Colors.green;
-        statusText = "Đã xác nhận";
+        statusText = "Hoàn tất";
         break;
       case BookingStatus.cancelled:
         statusColor = Colors.red;
         statusText = "Đã hủy";
+        break;
+      case BookingStatus.awaitingRefund:
+        statusColor = Colors.deepPurple;
+        statusText = "Chờ hoàn tiền";
         break;
       default:
         statusColor = Colors.grey;
@@ -337,7 +345,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                     final (badgeColor, badgeBg, badgeText) = _statusStyle(it.status);
 
                     return InkWell(
-                      onTap: () {
+                      onTap: () async {
                         // DI cục bộ cho ServiceAssignPage
                         final remote = ServiceAssignRemoteDataSourceImpl(
                           client: http.Client(),
@@ -346,19 +354,42 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                         final repo = ServiceAssignRepositoryImpl(remote: remote);
                         final usecase = GetServiceAssignsByStudioAssign(repo);
 
-                        Navigator.push(
+                        // ✅ Gói toàn bộ thông tin assign để mang sang trang chi tiết
+                        final assignSummary = AssignSummary(
+                          id: it.id,
+                          bookingId: it.bookingId,
+                          studioId: it.studioId,
+                          studioName: it.studioName,
+                          locationName: it.locationName,
+                          startTime: it.startTime,
+                          endTime: it.endTime,
+                          studioAmount: it.studioAmount,
+                          serviceAmount: it.serviceAmount,
+                          additionTime: it.additionTime,
+                          status: it.status,
+                          updatedAmount: it.updatedAmount,
+                        );
+
+                        final changed = await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(
                             builder: (_) => ChangeNotifierProvider<ServiceAssignProvider>(
                               create: (_) => ServiceAssignProvider(getUsecase: usecase),
                               child: ServiceAssignPage(
                                 studioAssignId: it.id,
-                                title: it.studioName,
-                                subtitle: it.locationName,
+                                assign: assignSummary, // ✅ truyền full thông tin
                               ),
                             ),
                           ),
                         );
+
+                        // Nếu trang con báo có thay đổi, reload lại
+                        if (changed == true && mounted) {
+                          setState(() {
+                            _futureAssigns = _fetchAssigns(widget.booking.id); // reload assigns
+                            _reloadTick++;                                     // ép reload PaymentSection
+                          });
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.all(12),
@@ -418,15 +449,20 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     );
   }
 
-  // Map status string -> màu & text hiển thị
+  // Map status string -> badge
   (Color, Color, String) _statusStyle(String status) {
     switch (status) {
       case 'COMING_SOON':
         return (Colors.orange, Colors.orange.shade50, 'Sắp diễn ra');
+      case 'IS_HAPPENING':
       case 'IN_PROGRESS':
         return (Colors.blue, Colors.blue.shade50, 'Đang diễn ra');
       case 'ENDED':
         return (Colors.green, Colors.green.shade50, 'Đã kết thúc');
+      case 'CANCELLED':
+        return (Colors.red, Colors.red.shade50, 'Đã hủy');
+      case 'AWAITING_REFUND':
+        return (Colors.deepPurple, Colors.deepPurple.shade50, 'Chờ hoàn tiền');
       default:
         return (Colors.grey, Colors.grey.shade200, status);
     }

@@ -13,7 +13,10 @@ class StudioAssignRemoteDataSourceImpl implements StudioAssignRemoteDataSource {
   final http.Client client;
   final FlutterSecureStorage secureStorage;
 
-  StudioAssignRemoteDataSourceImpl({required this.client, required this.secureStorage});
+  StudioAssignRemoteDataSourceImpl({
+    required this.client,
+    required this.secureStorage,
+  });
 
   Future<String> _getJwt() async {
     final jsonString = await secureStorage.read(key: _cachedTokenKey);
@@ -45,6 +48,27 @@ class StudioAssignRemoteDataSourceImpl implements StudioAssignRemoteDataSource {
     final data = jsonResponse['data'];
     if (data is! List) throw ServerException();
 
-    return data.map<StudioAssignModel>((e) => StudioAssignModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map<StudioAssignModel>((e) => StudioAssignModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<void> setStatus({required String assignId, required String status}) async {
+    final jwt = await _getJwt();
+    final url = Uri.parse('$_baseUrl/api/studio-assigns/status/$assignId');
+    final body = json.encode({'status': status});
+
+    final resp = await client.patch(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $jwt',
+      },
+      body: body,
+    );
+
+    if (resp.statusCode != 200) throw ServerException();
   }
 }
