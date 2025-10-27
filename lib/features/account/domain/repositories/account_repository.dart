@@ -1,15 +1,16 @@
+// lib/features/profile/domain/repositories/profile_repository.dart
+
 import 'package:dartz/dartz.dart';
-import '../../../../core/errors/failure.dart';
-import '../../domain/entities/account_profile.dart';
+import 'package:swd_mobie_flutter/features/account/domain/entities/account_profile.dart';
 
-abstract class AccountRepository {
-  // Hợp đồng 1: Lấy thông tin profile
-  Future<Either<Failure, AccountProfile>> getProfile();
+import '../../../../core/errors/failure.dart'; // Import lớp Failure chung
+// Import Entity
 
-  // Hợp đồng 2: Cập nhật profile (chỉ 3 trường được phép)
-  Future<Either<Failure, void>> updateProfile({
-    required String fullName,
-    required String phoneNumber,
-    required String address,
-  });
+abstract class ProfileRepository {
+  // Trả về: Hoặc là 1 Lỗi (Failure), hoặc là 1 Profile (thành công)
+  Future<Either<Failure, Profile>> getProfile();
+
+  // Trả về: Hoặc là 1 Lỗi (Failure), hoặc là void (thành công, không cần dữ liệu)
+  // Nhận vào 1 đối tượng Profile (entity)
+  Future<Either<Failure, void>> updateProfile(Profile profile);
 }

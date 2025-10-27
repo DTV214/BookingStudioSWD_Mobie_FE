@@ -5,6 +5,12 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:swd_mobie_flutter/features/account/data/datasources/account_remote_data_source.dart';
+import 'package:swd_mobie_flutter/features/account/data/repositories/profile_repository_impl.dart';
+import 'package:swd_mobie_flutter/features/account/domain/repositories/account_repository.dart';
+import 'package:swd_mobie_flutter/features/account/domain/usecases/get_profile.dart';
+import 'package:swd_mobie_flutter/features/account/domain/usecases/update_profile.dart';
+import 'package:swd_mobie_flutter/features/account/presentation/provider/profile_provider.dart';
 
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
@@ -90,7 +96,23 @@ class MyApp extends StatelessWidget {
         ProxyProvider<StudioRemoteDataSource, StudioRepository>(
           update: (_, remote, __) => StudioRepositoryImpl(remoteDataSource: remote),
         ),
+          ProxyProvider2<http.Client, AuthLocalDataSource, ProfileRemoteDataSource>(
+          update: (_, client, authLocal, __) => ProfileRemoteDataSourceImpl(
+            client: client,
+            authLocalDataSource: authLocal, // Dùng lại AuthLocal
+          ),
+        ),
 
+        ProxyProvider2<
+          http.Client,
+          AuthLocalDataSource,
+          ProfileRemoteDataSource
+        >(
+          update: (_, client, authLocal, __) => ProfileRemoteDataSourceImpl(
+            client: client,
+            authLocalDataSource: authLocal, // Dùng lại AuthLocal
+          ),
+        ),
         // ===== BOOKING - DATA & DOMAIN =====
         Provider<BookingRemoteDataSource>(
           create: (context) => BookingRemoteDataSourceImpl(
@@ -104,6 +126,16 @@ class MyApp extends StatelessWidget {
         ),
         Provider<GetBookingsUsecase>(
           create: (context) => GetBookingsUsecase(context.read<BookingRepository>()),
+        ),
+        ProxyProvider<ProfileRemoteDataSource, ProfileRepository>(
+          update: (_, remote, __) =>
+              ProfileRepositoryImpl(remoteDataSource: remote),
+        ),
+        ProxyProvider<ProfileRepository, GetProfile>(
+          update: (_, repo, __) => GetProfile(repo),
+        ),
+        ProxyProvider<ProfileRepository, UpdateProfile>(
+          update: (_, repo, __) => UpdateProfile(repo),
         ),
 
 //         // ===== SERVICE ASSIGN - DATA & DOMAIN =====
@@ -154,6 +186,13 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<ServiceAssignProvider>(
           create: (ctx) => ServiceAssignProvider(
             getUsecase: ctx.read<GetServiceAssignsByStudioAssign>(),
+          ),
+        ),
+// ===== PROFILE - PRESENTATION =====
+        ChangeNotifierProvider<ProfileProvider>(
+          create: (context) => ProfileProvider(
+            getProfile: context.read<GetProfile>(),
+            updateProfile: context.read<UpdateProfile>(),
           ),
         ),
       ],
