@@ -1,6 +1,7 @@
 // lib/features/studio/presentation/studio_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:swd_mobie_flutter/features/studio/domain/entities/studio.dart';
 
 // Import Provider và State
 import '../presentation/providers/studio_provider.dart';
@@ -79,15 +80,14 @@ class _StudioPageState extends State<StudioPage> {
   }
 
   // 4. Tách logic build danh sách ra widget riêng
-  Widget _buildStudioList() {
+Widget _buildStudioList() {
     // 5. Lắng nghe thay đổi từ StudioProvider
-    // Dùng context.watch<T>() hoặc Provider.of<T>(context)
     final provider = context.watch<StudioProvider>();
 
     // 6. Xử lý các trạng thái
     switch (provider.state) {
       case StudioState.loading:
-      case StudioState.initial: // Coi trạng thái ban đầu cũng là loading
+      case StudioState.initial:
         return Center(
           child: CircularProgressIndicator(color: Color(0xFF6A40D3)),
         );
@@ -101,8 +101,16 @@ class _StudioPageState extends State<StudioPage> {
         );
 
       case StudioState.loaded:
+        // --- CẬP NHẬT LOGIC LỌC ---
+        // Lọc ra danh sách studio không bị "deleted"
+        final activeStudios = provider.studios
+            .where((s) => s.status != StudioStatus.deleted)
+            .toList();
+        // -------------------------
+
         // Nếu không có studio nào
-        if (provider.studios.isEmpty) {
+        if (activeStudios.isEmpty) {
+          // <-- Sửa: dùng activeStudios
           return Center(child: Text("Không tìm thấy studio nào."));
         }
 
@@ -111,14 +119,13 @@ class _StudioPageState extends State<StudioPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Tất cả Studio (${provider.studios.length})",
+              "Tất cả Studio (${activeStudios.length})", // <-- Sửa: dùng activeStudios
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 16),
-            // Dùng ListView.builder để xây dựng danh sách
-            // Nhưng vì đang lồng trong ListView cha, ta dùng Column + map
             Column(
-              children: provider.studios.map((studio) {
+              children: activeStudios.map((studio) {
+                // <-- Sửa: dùng activeStudios
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: StudioCard(studio: studio), // Dùng dữ liệu thật
