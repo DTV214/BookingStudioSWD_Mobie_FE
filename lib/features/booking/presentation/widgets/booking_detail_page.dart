@@ -10,12 +10,15 @@ import 'package:provider/provider.dart';
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/booking_status.dart';
 
-// Điều hướng sang trang service-assign
+// ==== ĐIỀU HƯỚNG SANG SERVICE-ASSIGN (DI cục bộ) ====
 import 'service_assign_page.dart';
 import '../../presentation/providers/service_assign_provider.dart';
 import '../../domain/usecases/get_service_assigns_by_studio_assign_usecase.dart';
 import '../../../booking/data/repositories/service_assign_repository_impl.dart';
 import '../../../booking/data/datasources/service_assign_remote_data_source_impl.dart';
+
+// ==== SECTION PAYMENT (mới, Clean Architecture) ====
+import 'payment_section.dart';
 
 // ==== Cấu hình chung ====
 const _baseUrl = 'https://bookingstudioswd-be.onrender.com';
@@ -166,8 +169,14 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
             const SizedBox(height: 16),
             _buildAssignsSection(context), // ✅ Khu vực Assigns
             const SizedBox(height: 16),
+
+            // (GIỮ NGUYÊN) Section thanh toán cũ
             _buildPaymentSection(context),
-            // ❌ ĐÃ XÓA khu vực "Dịch vụ đã đặt"
+
+            const SizedBox(height: 16),
+
+            // (MỚI) Section thanh toán Clean Architecture — list payments thực từ API
+            PaymentSection(bookingId: widget.booking.id),
           ],
         ),
       ),
@@ -423,6 +432,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     }
   }
 
+  // (GIỮ NGUYÊN) Section thanh toán cũ
   Widget _buildPaymentSection(BuildContext context) {
     final priceString = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(widget.booking.total);
 
