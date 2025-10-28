@@ -2,21 +2,30 @@
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:swd_mobie_flutter/features/auth/data/datasources/auth_local_data_source.dart';
+
 // Sửa lại đường dẫn cho đúng
 import '../../../../core/errors/exceptions.dart';
 import '../models/token_model.dart';
 
 abstract class AuthRemoteDataSource {
   Future<TokenModel> loginWithGoogle();
+
+  Future<void> registerFCMToken(String token);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final GoogleSignIn googleSignIn;
   final http.Client client;
+  final AuthLocalDataSource localDataSource;
 
   // 1. ĐÃ XÓA BIẾN googleWebClientId VÌ NÓ ĐÃ ĐƯỢC CHUYỂN SANG MAIN.DART
 
-  AuthRemoteDataSourceImpl({required this.googleSignIn, required this.client});
+  AuthRemoteDataSourceImpl({
+    required this.googleSignIn,
+    required this.client,
+    required this.localDataSource,
+  });
 
   @override
   Future<TokenModel> loginWithGoogle() async {
@@ -65,6 +74,37 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       rethrow;
     } catch (e) {
       throw ServerException('An unexpected error occurred: ${e.toString()}');
+    }
+  }
+
+  @override
+  Future<void> registerFCMToken(String token) async {
+    // 1. Lấy JWT từ Local Data Source (FlutterSecureStorage)
+    final jwt = await localDataSource.getAccessToken();
+
+    if (jwt == null) {
+      // Xử lý trường hợp chưa đăng nhập
+      throw Exception("User not logged in. Cannot register FCM token.");
+    }
+
+    final uri = Uri.parse(
+      // "https://bookingstudioswd-be.onrender.com/auth/register-fcm-token",
+      "http://10.0.2.2:8080/auth/register-fcm-token",
+    );
+
+    final response = await client.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        // 2. Thêm Authorization Header để xác thực người dùng
+        'Authorization': 'Bearer $jwt',
+      },
+      body: jsonEncode({'fcmToken': token}),
+    );
+
+    if (response.statusCode != 200) {
+      // 3. Xử lý lỗi từ Server
+      throw Exception("Failed to register FCM token: ${response.body}");
     }
   }
 }
