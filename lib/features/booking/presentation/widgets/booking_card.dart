@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 // ✅ Dùng absolute import + alias 'bd'
 import 'package:swd_mobie_flutter/features/booking/presentation/widgets/booking_detail_page.dart'
@@ -7,15 +8,12 @@ as bd;
 
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/booking_status.dart';
-
+import '../providers/booking_provider.dart'; // để reload khi back
 
 class BookingCard extends StatelessWidget {
   final Booking booking;
 
   const BookingCard({super.key, required this.booking});
-
-  // ... (các hàm _buildHeader, _buildInfoRow giữ nguyên) ...
-  // (Tôi sẽ copy lại các hàm đó ở đây cho bạn)
 
   @override
   Widget build(BuildContext context) {
@@ -38,18 +36,17 @@ class BookingCard extends StatelessWidget {
           _buildHeader(),
           Divider(height: 24, color: Colors.grey[200]),
           _buildInfoRow(Icons.music_note, booking.studioName),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           _buildInfoRow(
             Icons.calendar_today,
             DateFormat('dd/MM/yyyy').format(booking.bookingDate),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           _buildInfoRow(
             Icons.access_time,
             DateFormat('HH:mm').format(booking.bookingDate),
-          ), // Giả sử time
-          SizedBox(height: 16),
-          // Sửa hàm này
+          ),
+          const SizedBox(height: 16),
           _buildActionButtons(context),
         ],
       ),
@@ -61,16 +58,15 @@ class BookingCard extends StatelessWidget {
     String statusText;
     Color statusTagColor;
 
-    // Dùng booking.status (Enum)
     switch (booking.status) {
-      case BookingStatus.pending:
-        statusColor = Colors.orange;
-        statusText = "Chờ xác nhận";
-        statusTagColor = Colors.orange.shade50;
+      case BookingStatus.inProgress:
+        statusColor = Colors.blue;
+        statusText = "Đang thực hiện";
+        statusTagColor = Colors.blue.shade50;
         break;
-      case BookingStatus.confirmed:
+      case BookingStatus.completed:
         statusColor = Colors.green;
-        statusText = "Đã xác nhận";
+        statusText = "Hoàn tất";
         statusTagColor = Colors.green.shade50;
         break;
       case BookingStatus.cancelled:
@@ -78,13 +74,17 @@ class BookingCard extends StatelessWidget {
         statusText = "Đã hủy";
         statusTagColor = Colors.red.shade50;
         break;
-      default: // Cho trường hợp unknown
+      case BookingStatus.awaitingRefund:
+        statusColor = Colors.deepPurple;
+        statusText = "Chờ hoàn tiền";
+        statusTagColor = Colors.deepPurple.shade50;
+        break;
+      default:
         statusColor = Colors.grey;
         statusText = "Không rõ";
         statusTagColor = Colors.grey.shade50;
     }
 
-    // Format tiền tệ
     final priceString = NumberFormat.currency(
       locale: 'vi_VN',
       symbol: 'đ',
@@ -97,14 +97,13 @@ class BookingCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              booking.customerName, // Lấy từ booking.customerName
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              booking.customerName,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
-              // Kiểm tra phone null
               booking.phone ?? "Không có SĐT",
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
             ),
           ],
         ),
@@ -112,16 +111,16 @@ class BookingCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              priceString, // Dùng giá đã format
-              style: TextStyle(
+              priceString,
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF6A40D3),
               ),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: statusTagColor,
                 borderRadius: BorderRadius.circular(6),
@@ -145,33 +144,37 @@ class BookingCard extends StatelessWidget {
     return Row(
       children: [
         Icon(icon, color: Colors.grey, size: 16),
-        SizedBox(width: 8),
-        Text(text, style: TextStyle(fontSize: 14)),
+        const SizedBox(width: 8),
+        Text(text, style: const TextStyle(fontSize: 14)),
       ],
     );
   }
 
-  // --- (PHẦN CẬP NHẬT) ---
-  // Sửa hàm này
   Widget _buildActionButtons(BuildContext context) {
-    // Xóa bỏ logic IF, luôn hiển thị nút "Chi tiết"
     return Center(
       child: TextButton(
-        child: Text(
+        child: const Text(
           "Xem chi tiết",
           style: TextStyle(
             color: Color(0xFF6A40D3),
             fontWeight: FontWeight.w600,
           ),
         ),
-        onPressed: () {
-          // Xử lý điều hướng
-          Navigator.push(
+        onPressed: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => bd.BookingDetailPage(booking: booking),
             ),
           );
+          // Quay về → reload danh sách booking
+          if (context.mounted) {
+            try {
+              await context.read<BookingProvider>().fetchBookings();
+            } catch (_) {
+              // nếu chưa inject BookingProvider ở trên cây widget thì bỏ qua
+            }
+          }
         },
       ),
     );

@@ -66,16 +66,17 @@ class BookingModel extends Booking {
   }
 
   // Hàm trợ giúp (helper) để map String sang Enum
-  static BookingStatus _mapStatus(String? status) {
-    switch (status) {
+  static BookingStatus _mapStatus(String? apiStatus) {
+    switch ((apiStatus ?? '').toUpperCase()) {
       case 'IN_PROGRESS':
-        return BookingStatus.pending;
-      case 'DONE':
-        return BookingStatus.confirmed;
+        return BookingStatus.inProgress;
+      case 'COMPLETED':
+        return BookingStatus.completed;
       case 'CANCELLED':
         return BookingStatus.cancelled;
+      case 'AWAITING_REFUND':
+        return BookingStatus.awaitingRefund;
       default:
-        // Nếu API trả về trạng thái lạ, ta gán là unknown
         return BookingStatus.unknown;
     }
   }
