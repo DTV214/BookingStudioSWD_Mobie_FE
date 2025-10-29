@@ -1,12 +1,16 @@
 // lib/features/home/presentation/widgets/quick_actions.dart
 import 'package:flutter/material.dart';
 
+// Điều hướng tới các trang đích
+import 'package:swd_mobie_flutter/features/booking/presentation/booking_page.dart';
+import 'package:swd_mobie_flutter/features/studio/presentation/studio_page.dart';
+
 class QuickActions extends StatelessWidget {
   const QuickActions({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryColor = Color(0xFF6A40D3);
+    final Color primaryColor = const Color(0xFF6A40D3);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -23,29 +27,37 @@ class QuickActions extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              // 1. Sử dụng widget con _QuickActionItem
               child: _QuickActionItem(
                 context: context,
-                icon: Icons.add_circle_outline,
-                label: "Đặt lịch mới",
-                backgroundColor: primaryColor,
+                icon: Icons.calendar_today_outlined,
+                label: "Xem lịch",
+                backgroundColor: primaryColor,       // Filled primary
                 iconColor: Colors.white,
                 labelColor: Colors.white,
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BookingPage()),
+                  );
+                },
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              // 2. Sử dụng widget con _QuickActionItem
               child: _QuickActionItem(
                 context: context,
-                icon: Icons.notifications_outlined,
-                label: "Thông báo",
-                backgroundColor: Colors.white,
+                icon: Icons.storefront_outlined,
+                label: "Xem studio",
+                backgroundColor: Colors.white,       // Outlined style
                 iconColor: primaryColor,
                 labelColor: primaryColor,
                 borderColor: primaryColor.withOpacity(0.5),
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const StudioPage()),
+                  );
+                },
               ),
             ),
           ],
