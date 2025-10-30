@@ -12,6 +12,9 @@ import 'package:swd_mobie_flutter/features/account/domain/repositories/account_r
 import 'package:swd_mobie_flutter/features/account/domain/usecases/get_profile.dart';
 import 'package:swd_mobie_flutter/features/account/domain/usecases/update_profile.dart';
 import 'package:swd_mobie_flutter/features/account/presentation/provider/profile_provider.dart';
+import 'package:swd_mobie_flutter/features/booking/domain/entities/booking.dart';
+import 'package:swd_mobie_flutter/features/booking/domain/usecases/get_booking_detail_usecase.dart';
+import 'package:swd_mobie_flutter/features/booking/presentation/widgets/booking_detail_page.dart';
 
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
@@ -53,12 +56,16 @@ import 'core/data/services/push_notification_service_impl.dart';
 import 'core/domain/services/push_notification_service.dart';
 import 'features/auth/domain/usecases/register_fcm_token.dart';
 
+/// Enable Process Remote Message when app is closed
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // BẮT BUỘC: Cần khởi tạo Firebase lần nữa trong Top-Level handler
   await Firebase.initializeApp();
   print("Handling a background message: ${message.messageId}");
 }
+
+// GLOBAL KEY FOR NAVIGATION
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -138,13 +145,6 @@ class MyApp extends StatelessWidget {
           update: (_, remote, __) =>
               StudioRepositoryImpl(remoteDataSource: remote),
         ),
-          ProxyProvider2<http.Client, AuthLocalDataSource, ProfileRemoteDataSource>(
-          update: (_, client, authLocal, __) => ProfileRemoteDataSourceImpl(
-            client: client,
-            authLocalDataSource: authLocal, // Dùng lại AuthLocal
-          ),
-        ),
-
         ProxyProvider2<
           http.Client,
           AuthLocalDataSource,
@@ -152,9 +152,10 @@ class MyApp extends StatelessWidget {
         >(
           update: (_, client, authLocal, __) => ProfileRemoteDataSourceImpl(
             client: client,
-            authLocalDataSource: authLocal, // Dùng lại AuthLocal
+            authLocalDataSource: authLocal,
           ),
         ),
+
         // ===== BOOKING - DATA & DOMAIN =====
         Provider<BookingRemoteDataSource>(
           create: (context) => BookingRemoteDataSourceImpl(
@@ -171,6 +172,10 @@ class MyApp extends StatelessWidget {
           create: (context) =>
               GetBookingsUsecase(context.read<BookingRepository>()),
         ),
+        Provider<GetBookingDetailUsecase>(
+          create: (context) =>
+              GetBookingDetailUsecase(context.read<BookingRepository>()),
+        ),
         ProxyProvider<ProfileRemoteDataSource, ProfileRepository>(
           update: (_, remote, __) =>
               ProfileRepositoryImpl(remoteDataSource: remote),
@@ -182,38 +187,11 @@ class MyApp extends StatelessWidget {
           update: (_, repo, __) => UpdateProfile(repo),
         ),
 
-        //         // ===== SERVICE ASSIGN - DATA & DOMAIN =====
-        //         ProxyProvider2<FlutterSecureStorage, http.Client, ServiceAssignRemoteDataSource>(
-        //           update: (_, storage, client, __) =>
-        //               ServiceAssignRemoteDataSourceImpl(
-        //                 client: client,
-        //                 secureStorage: storage,
-        //               ),
-        //         ),
-        //
-        //         // ✅ BỔ SUNG: Repository từ RemoteDataSource
-        //         ProxyProvider<ServiceAssignRemoteDataSource, ServiceAssignRepository>(
-        //           update: (_, remote, __) =>
-        //               ServiceAssignRepositoryImpl(remoteDataSource: remote),
-        //         ),
-        //
-        // // Usecase đọc từ Repository (phải đặt SAU provider Repository)
-        //         Provider<GetServiceAssignsByStudioAssign>(
-        //           create: (ctx) =>
-        //               GetServiceAssignsByStudioAssign(ctx.read<ServiceAssignRepository>()),
-        //         ),
-        //
-        // // ChangeNotifier đọc từ Usecase
-        //         ChangeNotifierProvider<ServiceAssignProvider>(
-        //           create: (ctx) => ServiceAssignProvider(
-        //             getUsecase: ctx.read<GetServiceAssignsByStudioAssign>(),
-        //           ),
-        //         ),
-
         // 5. CORE - SERVICES (MỚI)
-        Provider<PushNotificationService>(
-          // Thay bằng PushNotificationServiceImpl khi bạn tạo file
-          create: (_) => PushNotificationServiceImpl(),
+        ProxyProvider<GetBookingDetailUsecase, PushNotificationService>(
+          update: (_, getDetailUsecase, __) => PushNotificationServiceImpl(
+            getBookingDetailUsecase: getDetailUsecase,
+          ),
         ),
 
         // ===== B. PRESENTATION (ChangeNotifier) =====
@@ -240,7 +218,7 @@ class MyApp extends StatelessWidget {
             getUsecase: ctx.read<GetServiceAssignsByStudioAssign>(),
           ),
         ),
-// ===== PROFILE - PRESENTATION =====
+        // ===== PROFILE - PRESENTATION =====
         ChangeNotifierProvider<ProfileProvider>(
           create: (context) => ProfileProvider(
             getProfile: context.read<GetProfile>(),
@@ -253,6 +231,16 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         debugShowCheckedModeBanner: false,
         home: const LoginPage(),
+        navigatorKey: navigatorKey,
+        routes: {
+          '/booking_detail': (context) {
+            // 1. Extract argument
+            final booking = ModalRoute.of(context)?.settings.arguments as Booking;
+
+            // 2. Redirect Page
+            return BookingDetailPage(booking: booking);
+          }
+        },
       ),
     );
   }

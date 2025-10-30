@@ -88,8 +88,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     }
 
     final uri = Uri.parse(
-      // "https://bookingstudioswd-be.onrender.com/auth/register-fcm-token",
-      "http://10.0.2.2:8080/auth/register-fcm-token",
+      "https://bookingstudioswd-be.onrender.com/auth/register-fcm-token",
+      // "http://10.0.2.2:8080/auth/register-fcm-token",
     );
 
     final response = await client.post(

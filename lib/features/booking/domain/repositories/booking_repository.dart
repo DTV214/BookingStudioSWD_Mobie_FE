@@ -15,4 +15,5 @@ abstract class BookingRepository {
   // Future<Either<Failure, Booking>> getBookingDetail(String id);
   // Future<Either<Failure, void>> confirmBooking(String id);
   // Future<Either<Failure, void>> cancelBooking(String id);
+  Future<Either<Failure, Booking>> getBookingDetail(String bookingId);
 }

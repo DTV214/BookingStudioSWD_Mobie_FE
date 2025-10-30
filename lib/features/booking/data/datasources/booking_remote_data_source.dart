@@ -7,4 +7,6 @@ abstract class BookingRemoteDataSource {
   /// Ném ra [ServerException] cho tất cả các mã lỗi (4xx, 5xx).
   /// Ném ra [NetworkException] khi có lỗi kết nối.
   Future<List<BookingModel>> getBookings();
+
+  Future<BookingModel> getBookingDetail(String bookingId);
 }

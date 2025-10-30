@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:swd_mobie_flutter/core/domain/services/push_notification_service.dart';
+import 'package:swd_mobie_flutter/features/booking/domain/usecases/get_booking_detail_usecase.dart';
+import 'package:swd_mobie_flutter/main.dart';
 
 final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
-    FlutterLocalNotificationsPlugin();
+FlutterLocalNotificationsPlugin();
 
 /// Channel Definition
 const AndroidNotificationChannel _channel = AndroidNotificationChannel(
@@ -15,6 +19,11 @@ const AndroidNotificationChannel _channel = AndroidNotificationChannel(
 
 class PushNotificationServiceImpl implements PushNotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  final GetBookingDetailUsecase getBookingDetailUsecase;
+
+  PushNotificationServiceImpl({
+    required this.getBookingDetailUsecase,
+  });
 
   /// Init Local Notification (Foreground) And Its Handler, Channel for Android
   @override
@@ -24,22 +33,25 @@ class PushNotificationServiceImpl implements PushNotificationService {
 
     // 2. Khởi tạo Local Notifications cho cả Android/iOS
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings initializationSettingsIOS =
-        DarwinInitializationSettings();
+    DarwinInitializationSettings();
     const InitializationSettings initializationSettings =
-        InitializationSettings(
-          android: initializationSettingsAndroid,
-          iOS: initializationSettingsIOS,
-        );
+    InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsIOS,
+    );
 
-    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    await _flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: onDidReceiveLocalNotification,
+    );
 
     // 3. Tạo Channel cho Android (Cần thiết cho Android 8.0+)
     await _flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
+        AndroidFlutterLocalNotificationsPlugin
+    >()
         ?.createNotificationChannel(_channel);
 
     // 4. Thiết lập xử lý tin nhắn Foreground
@@ -53,56 +65,104 @@ class PushNotificationServiceImpl implements PushNotificationService {
     return await _fcm.getToken();
   }
 
-  // 3. Phương thức lắng nghe thông báo (sẽ làm sau)
-  @override
-  void listenToNotifications(Function(Map<String, dynamic> message) handler) {
-    // Logic lắng nghe...
-  }
-
-  // Xử lý tin nhắn khi app đang chạy (Foreground)
+  /// Showing Notification Handle for Foreground Message
   void _handleForegroundMessages() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final notification = message.notification;
       final android = message.notification?.android;
 
       if (notification != null && android != null) {
-        // Tự tạo và hiển thị thông báo Local
         _flutterLocalNotificationsPlugin.show(
-          notification.hashCode, // ID thông báo
+          // Notification Id
+          notification.hashCode,
           notification.title,
           notification.body,
           NotificationDetails(
             android: AndroidNotificationDetails(
               _channel.id,
-              // PHẢI SỬ DỤNG CHÍNH XÁC ID CỦA CHANNEL ĐÃ TẠO Ở TRÊN
               _channel.name,
               channelDescription: _channel.description,
               icon: android.smallIcon,
             ),
           ),
-          // Payload: Lưu trữ data để xử lý khi người dùng nhấn vào thông báo này
-          payload: message.data['screen'] ?? '',
+          // Payload: Save Data for Clicking Notification Handle
+          payload: json.encode(message.data),
         );
       }
     });
   }
 
-  // Xử lý khi người dùng nhấn vào thông báo
-  // (Background và Terminated)
+  /// Clicking Notification Handle Remote Message (Background and Terminated)
   Future<void> _setupInteractedMessage() async {
-    // Trường hợp 1: Mở ứng dụng từ Terminated state (Đã đóng hoàn toàn)
+    // Case 01: Terminated State
     RemoteMessage? initialMessage = await FirebaseMessaging.instance
         .getInitialMessage();
-
     if (initialMessage != null) {
-      // Logic xử lý khi mở từ Terminated state (ví dụ: chuyển trang)
-      // _handleMessage(initialMessage);
+      _handleMessage(initialMessage);
     }
 
-    // Trường hợp 2: Khi người dùng nhấn vào thông báo (từ Background state)
+    // Case 02: Background State
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      // Logic xử lý khi mở từ Background state (ví dụ: chuyển trang)
-      // _handleMessage(message);
+      _handleMessage(message);
     });
+  }
+
+  /// Extract Payload from Message and Redirect Page
+  void _handleMessage(RemoteMessage message) {
+    // 1. Extract Payload
+    final String screen = message.data['screen'] ?? '';
+    final String bookingId = message.data['booking_id'] ?? '';
+
+    print('Payload received. Navigating to: $screen with ID: $bookingId');
+
+    // 2. Redirect Page
+    _navigateToDetail(screen, bookingId);
+  }
+
+  /// Navigate screen detail by using main.dart Global Navigate
+  void _navigateToDetail(String screen, String entityId) async {
+    if (screen == 'booking_detail') {
+      final result = await getBookingDetailUsecase(entityId);
+
+      result.fold(
+              (failure) {
+            // Handle Fail
+          },
+              (booking) {
+            // Handle Success
+            if (navigatorKey.currentState != null) {
+              navigatorKey.currentState!.pushNamed(
+                '/booking_detail',
+                arguments: booking,
+              );
+            }
+          }
+      );
+    }
+  }
+
+  /// Clicking Notification Handle for Foreground Message
+  void onDidReceiveLocalNotification(
+      NotificationResponse notificationResponse,) async {
+    if (notificationResponse.payload != null) {
+      try {
+        // 1. Parse JSON string
+        final Map<String, dynamic> data = json.decode(
+          notificationResponse.payload!,
+        );
+
+        final String screen = data['screen'] ?? '';
+        final String bookingId = data['booking_id'] ?? '';
+
+        print(
+          'Local Notification clicked. Navigating to: $screen with ID: $bookingId',
+        );
+
+        // 2. Redirect Page
+        _navigateToDetail(screen, bookingId);
+      } catch (e) {
+        print('Lỗi parsing payload JSON: $e');
+      }
+    }
   }
 }
