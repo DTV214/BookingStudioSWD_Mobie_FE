@@ -91,8 +91,11 @@ class BookingDetailPage extends StatefulWidget {
 class _BookingDetailPageState extends State<BookingDetailPage> {
   late Future<List<_AssignItem>> _futureAssigns;
 
-  /// Tổng tiền hiện tại được tính từ assigns mới nhất
+  /// Tổng tiền hiện tại tính từ assigns mới nhất
   int _currentTotal = 0;
+
+  /// Trạng thái tổng của booking (badge ở "Thông tin Lịch đặt")
+  late BookingStatus _bookingStatus;
 
   int _reloadTick = 0; // ép rebuild PaymentSection sau khi back/tạo final
 
@@ -102,20 +105,54 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   @override
   void initState() {
     super.initState();
-    // Khởi tạo _currentTotal bằng total ban đầu (để có giá trị hiển thị trước)
+    // Khởi tạo giá trị hiển thị ban đầu
     _currentTotal = widget.booking.total;
+    _bookingStatus = widget.booking.status;
+
     _futureAssigns = _fetchAssigns(widget.booking.id);
+    // Reload status booking từ server để đồng bộ tức thời
+    _reloadBookingStatusFromServer();
   }
+
+  /// Map status raw từ BE -> enum BookingStatus
+  BookingStatus _mapApiStatus(String raw) {
+    final s = (raw.trim()).toUpperCase();
+    switch (s) {
+    // các biến thể “đang diễn ra”
+      case 'IN_PROGRESS':
+      case 'IS_HAPPENING':
+      case 'COMING_SOON':
+        return BookingStatus.inProgress;
+
+    // các biến thể “hoàn tất”
+      case 'DONE':
+      case 'CONFIRMED':
+      case 'COMPLETED': // ✅ thêm cái này
+        return BookingStatus.completed;
+
+      case 'CANCELLED':
+        return BookingStatus.cancelled;
+
+      case 'AWAITING_REFUND':
+        return BookingStatus.awaitingRefund;
+
+      default:
+        return BookingStatus.unknown;
+    }
+  }
+
+
 
   Future<void> _refreshAll() async {
     setState(() {
       _futureAssigns = _fetchAssigns(widget.booking.id);
       _reloadTick++; // ép PaymentSection reload
     });
+    await _reloadBookingStatusFromServer(); // ✅ kèm reload booking status
   }
 
   int _calcTotalFromAssigns(List<_AssignItem> items) {
-    // Tổng = sum(studioAmount + serviceAmount + (updatedAmount?))
+    // Tổng = sum(studioAmount + serviceAmount + updatedAmount?)
     int sum = 0;
     for (final it in items) {
       sum += it.studioAmount;
@@ -174,7 +211,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
           .map<_AssignItem>((e) => _AssignItem.fromJson(e as Map<String, dynamic>))
           .toList();
 
-      // ✅ Cập nhật _currentTotal ngay theo assigns mới nhất
+      // ✅ Cập nhật _currentTotal theo assigns mới nhất
       if (mounted) {
         setState(() {
           _currentTotal = items.isEmpty ? widget.booking.total : _calcTotalFromAssigns(items);
@@ -186,6 +223,54 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     } catch (e) {
       debugPrint('[Assigns] Unknown error: $e');
       rethrow;
+    }
+  }
+
+  /// Reload booking status từ BE và cập nhật badge
+  Future<void> _reloadBookingStatusFromServer() async {
+    try {
+      final storage = const FlutterSecureStorage();
+      final jsonString = await storage.read(key: _cachedTokenKey);
+      if (jsonString == null) throw Exception('No cached token');
+      final map = json.decode(jsonString) as Map<String, dynamic>;
+      final raw = map['data'] ?? map['jwt'];
+      if (raw is! String || raw.isEmpty) throw Exception('Invalid token');
+      final jwt = raw;
+
+      final url = Uri.parse('$_baseUrl/api/bookings/${widget.booking.id}');
+      final resp = await http.get(url, headers: {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $jwt',
+      });
+      if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+
+      final contentType = (resp.headers['content-type'] ?? '').toLowerCase();
+      final bodyStart = resp.body.trimLeft();
+      final looksLikeHtml = bodyStart.startsWith('<!DOCTYPE') || bodyStart.startsWith('<html');
+      if (!contentType.contains('application/json') || looksLikeHtml) throw Exception('Non-JSON');
+
+      final Map<String, dynamic> jsonResponse = json.decode(resp.body);
+      final data = jsonResponse['data'];
+      if (data is! Map<String, dynamic>) throw Exception('Invalid data');
+
+      final rawStatus = (data['status'] as String?) ?? '';
+      final mapped = _mapApiStatus(rawStatus);
+
+      // debug để soi nhanh khi gặp lỗi dữ liệu:
+      debugPrint('[BookingDetail] rawStatus="$rawStatus" -> mapped=$mapped');
+
+      if (!mounted) return;
+
+      // Chỉ cập nhật khi BE rõ ràng
+      if (rawStatus.trim().isNotEmpty && mapped != BookingStatus.unknown) {
+        setState(() => _bookingStatus = mapped);
+      } else {
+        // Không update để tránh “Không rõ” đè lên trạng thái hợp lệ đang có
+        // Có thể log để kiểm tra dữ liệu BE
+        debugPrint('[BookingDetail] Skip update status (raw="$rawStatus"). Keep current: $_bookingStatus');
+      }
+    } catch (e) {
+      // Có thể hiển thị snack/log nếu cần
     }
   }
 
@@ -223,7 +308,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
               _buildAssignsSection(context),
               const SizedBox(height: 16),
 
-              // CŨ (giữ cho tương thích UI cũ)
+              // CŨ (giữ cho tương thích UI cũ) — dùng _currentTotal (đã cập nhật)
               _buildPaymentSection(context),
               const SizedBox(height: 16),
 
@@ -315,7 +400,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                           if (!mounted) return;
 
                           if (prov.state == FinalPaymentState.success) {
-                            await _refreshAll(); // ✅ tạo xong -> reload luôn (assigns + payments)
+                            await _refreshAll(); // ✅ tạo xong -> reload (assigns + payments + booking status)
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Đã tạo thanh toán cuối.')),
                             );
@@ -377,7 +462,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     }
   }
 
-  // ====== UI cũ giữ nguyên ======
+  // ====== UI cũ giữ nguyên nhưng dùng _currentTotal ======
   Widget _buildCustomerCard(BuildContext context) {
     return Card(
       elevation: 0,
@@ -405,27 +490,30 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   Widget _buildBookingInfoCard(BuildContext context) {
     Color statusColor;
     String statusText;
-    switch (widget.booking.status) {
+
+    switch (_bookingStatus) {
       case BookingStatus.inProgress:
         statusColor = Colors.blue;
-        statusText = "Đang thực hiện";
+        statusText  = "Đang thực hiện";
         break;
       case BookingStatus.completed:
         statusColor = Colors.green;
-        statusText = "Hoàn tất";
+        statusText  = "Hoàn tất";
         break;
       case BookingStatus.cancelled:
         statusColor = Colors.red;
-        statusText = "Đã hủy";
+        statusText  = "Đã hủy";
         break;
       case BookingStatus.awaitingRefund:
         statusColor = Colors.deepPurple;
-        statusText = "Chờ hoàn tiền";
+        statusText  = "Chờ hoàn tiền";
         break;
-      default:
+      case BookingStatus.unknown: // ✅ thêm case này
         statusColor = Colors.grey;
-        statusText = "Không rõ";
+        statusText  = "Không rõ";
+        break;
     }
+
 
     return Card(
       elevation: 0,
@@ -573,7 +661,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                         );
 
                         if (changed == true && mounted) {
-                          await _refreshAll(); // ✅ quay về có thay đổi → reload tất cả (assigns + tổng tiền + payments)
+                          await _refreshAll(); // ✅ quay về có thay đổi → reload tất cả
                         }
                       },
                       child: Container(
