@@ -44,4 +44,10 @@ class AuthRepositoryImpl implements AuthRepository {
       return Left(CacheFailure(e.message));
     }
   }
+
+  @override
+  Future<void> registerFCMToken(String token) async {
+    // Chúng ta cần gọi phương thức nào trên 'remoteDataSource' ở đây?
+    await remoteDataSource.registerFCMToken(token);
+  }
 }

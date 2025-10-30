@@ -9,8 +9,12 @@ const CACHED_TOKEN_KEY = 'CACHED_TOKEN';
 // "Hợp đồng" cho Local Data Source
 abstract class AuthLocalDataSource {
   Future<void> cacheToken(TokenModel tokenToCache);
+
   Future<TokenModel?> getLastToken();
+
   Future<void> clearToken();
+
+  Future<String?> getAccessToken();
 }
 
 // "Triển khai" Hợp đồng
@@ -45,7 +49,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       print("[AuthLocalDataSource] LỖI cacheToken: $e");
     }
   }
-@override
+
+  @override
   Future<TokenModel?> getLastToken() async {
     // --- SỬA LẠI KIỂU TRẢ VỀ ---
     print("[AuthLocalDataSource] Đang gọi getLastToken...");
@@ -76,7 +81,7 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     }
   }
 
-@override
+  @override
   Future<void> clearToken() async {
     try {
       print("[AuthLocalDataSource] Đang xóa token...");
@@ -85,5 +90,11 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     } catch (e) {
       print("[AuthLocalDataSource] LỖI clearToken: $e");
     }
+  }
+
+  @override
+  Future<String?> getAccessToken() async {
+    final tokenModel = await getLastToken();
+    return tokenModel?.jwt;
   }
 }

@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,9 @@ import 'package:swd_mobie_flutter/features/account/domain/repositories/account_r
 import 'package:swd_mobie_flutter/features/account/domain/usecases/get_profile.dart';
 import 'package:swd_mobie_flutter/features/account/domain/usecases/update_profile.dart';
 import 'package:swd_mobie_flutter/features/account/presentation/provider/profile_provider.dart';
+import 'package:swd_mobie_flutter/features/booking/domain/entities/booking.dart';
+import 'package:swd_mobie_flutter/features/booking/domain/usecases/get_booking_detail_usecase.dart';
+import 'package:swd_mobie_flutter/features/booking/presentation/widgets/booking_detail_page.dart';
 
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
@@ -47,9 +51,26 @@ import 'features/booking/domain/repositories/service_assign_repository.dart';
 import 'features/booking/domain/usecases/get_service_assigns_by_studio_assign_usecase.dart';
 import 'features/booking/presentation/providers/service_assign_provider.dart';
 
+// ========== Push Notification ==========
+import 'core/data/services/push_notification_service_impl.dart';
+import 'core/domain/services/push_notification_service.dart';
+import 'features/auth/domain/usecases/register_fcm_token.dart';
+
+/// Enable Process Remote Message when app is closed
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // BẮT BUỘC: Cần khởi tạo Firebase lần nữa trong Top-Level handler
+  await Firebase.initializeApp();
+  print("Handling a background message: ${message.messageId}");
+}
+
+// GLOBAL KEY FOR NAVIGATION
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(const MyApp());
 }
 
@@ -65,44 +86,65 @@ class MyApp extends StatelessWidget {
         Provider<GoogleSignIn>(
           create: (_) => GoogleSignIn(
             serverClientId:
-            "161293462080-uis6ondt03svjsdbqskcadknvt81rqrg.apps.googleusercontent.com",
+                "161293462080-uis6ondt03svjsdbqskcadknvt81rqrg.apps.googleusercontent.com",
           ),
         ),
-        Provider<FlutterSecureStorage>(create: (_) => const FlutterSecureStorage()),
+        Provider<FlutterSecureStorage>(
+          create: (_) => const FlutterSecureStorage(),
+        ),
 
         // ===== AUTH - DATA =====
         ProxyProvider<FlutterSecureStorage, AuthLocalDataSource>(
-          update: (_, storage, __) => AuthLocalDataSourceImpl(secureStorage: storage),
+          update: (_, storage, __) =>
+              AuthLocalDataSourceImpl(secureStorage: storage),
         ),
-        ProxyProvider2<GoogleSignIn, http.Client, AuthRemoteDataSource>(
-          update: (_, googleSignIn, client, __) =>
-              AuthRemoteDataSourceImpl(googleSignIn: googleSignIn, client: client),
+        ProxyProvider3<
+          GoogleSignIn,
+          http.Client,
+          AuthLocalDataSource,
+          AuthRemoteDataSource
+        >(
+          update: (_, googleSignIn, client, localDataSource, __) =>
+              AuthRemoteDataSourceImpl(
+                googleSignIn: googleSignIn,
+                client: client,
+                localDataSource: localDataSource,
+              ),
         ),
 
         // ===== AUTH - DOMAIN =====
-        ProxyProvider2<AuthRemoteDataSource, AuthLocalDataSource, AuthRepository>(
-          update: (_, remote, local, __) =>
-              AuthRepositoryImpl(remoteDataSource: remote, localDataSource: local),
+        ProxyProvider2<
+          AuthRemoteDataSource,
+          AuthLocalDataSource,
+          AuthRepository
+        >(
+          update: (_, remote, local, __) => AuthRepositoryImpl(
+            remoteDataSource: remote,
+            localDataSource: local,
+          ),
         ),
         ProxyProvider<AuthRepository, LoginWithGoogle>(
           update: (_, repo, __) => LoginWithGoogle(repo),
         ),
+        ProxyProvider<AuthRepository, RegisterFCMToken>(
+          update: (_, repo, __) => RegisterFCMToken(repo),
+        ),
 
         // ===== STUDIO - DATA & DOMAIN (gọn, không trùng lặp) =====
-        ProxyProvider2<AuthLocalDataSource, http.Client, StudioRemoteDataSource>(
-          update: (_, authLocal, client, __) =>
-              StudioRemoteDataSourceImpl(client: client, authLocalDataSource: authLocal),
-        ),
-        ProxyProvider<StudioRemoteDataSource, StudioRepository>(
-          update: (_, remote, __) => StudioRepositoryImpl(remoteDataSource: remote),
-        ),
-          ProxyProvider2<http.Client, AuthLocalDataSource, ProfileRemoteDataSource>(
-          update: (_, client, authLocal, __) => ProfileRemoteDataSourceImpl(
+        ProxyProvider2<
+          AuthLocalDataSource,
+          http.Client,
+          StudioRemoteDataSource
+        >(
+          update: (_, authLocal, client, __) => StudioRemoteDataSourceImpl(
             client: client,
-            authLocalDataSource: authLocal, // Dùng lại AuthLocal
+            authLocalDataSource: authLocal,
           ),
         ),
-
+        ProxyProvider<StudioRemoteDataSource, StudioRepository>(
+          update: (_, remote, __) =>
+              StudioRepositoryImpl(remoteDataSource: remote),
+        ),
         ProxyProvider2<
           http.Client,
           AuthLocalDataSource,
@@ -110,9 +152,10 @@ class MyApp extends StatelessWidget {
         >(
           update: (_, client, authLocal, __) => ProfileRemoteDataSourceImpl(
             client: client,
-            authLocalDataSource: authLocal, // Dùng lại AuthLocal
+            authLocalDataSource: authLocal,
           ),
         ),
+
         // ===== BOOKING - DATA & DOMAIN =====
         Provider<BookingRemoteDataSource>(
           create: (context) => BookingRemoteDataSourceImpl(
@@ -121,11 +164,17 @@ class MyApp extends StatelessWidget {
           ),
         ),
         Provider<BookingRepository>(
-          create: (context) =>
-              BookingRepositoryImpl(remoteDataSource: context.read<BookingRemoteDataSource>()),
+          create: (context) => BookingRepositoryImpl(
+            remoteDataSource: context.read<BookingRemoteDataSource>(),
+          ),
         ),
         Provider<GetBookingsUsecase>(
-          create: (context) => GetBookingsUsecase(context.read<BookingRepository>()),
+          create: (context) =>
+              GetBookingsUsecase(context.read<BookingRepository>()),
+        ),
+        Provider<GetBookingDetailUsecase>(
+          create: (context) =>
+              GetBookingDetailUsecase(context.read<BookingRepository>()),
         ),
         ProxyProvider<ProfileRemoteDataSource, ProfileRepository>(
           update: (_, remote, __) =>
@@ -138,39 +187,20 @@ class MyApp extends StatelessWidget {
           update: (_, repo, __) => UpdateProfile(repo),
         ),
 
-//         // ===== SERVICE ASSIGN - DATA & DOMAIN =====
-//         ProxyProvider2<FlutterSecureStorage, http.Client, ServiceAssignRemoteDataSource>(
-//           update: (_, storage, client, __) =>
-//               ServiceAssignRemoteDataSourceImpl(
-//                 client: client,
-//                 secureStorage: storage,
-//               ),
-//         ),
-//
-//         // ✅ BỔ SUNG: Repository từ RemoteDataSource
-//         ProxyProvider<ServiceAssignRemoteDataSource, ServiceAssignRepository>(
-//           update: (_, remote, __) =>
-//               ServiceAssignRepositoryImpl(remoteDataSource: remote),
-//         ),
-//
-// // Usecase đọc từ Repository (phải đặt SAU provider Repository)
-//         Provider<GetServiceAssignsByStudioAssign>(
-//           create: (ctx) =>
-//               GetServiceAssignsByStudioAssign(ctx.read<ServiceAssignRepository>()),
-//         ),
-//
-// // ChangeNotifier đọc từ Usecase
-//         ChangeNotifierProvider<ServiceAssignProvider>(
-//           create: (ctx) => ServiceAssignProvider(
-//             getUsecase: ctx.read<GetServiceAssignsByStudioAssign>(),
-//           ),
-//         ),
-
+        // 5. CORE - SERVICES (MỚI)
+        ProxyProvider<GetBookingDetailUsecase, PushNotificationService>(
+          update: (_, getDetailUsecase, __) => PushNotificationServiceImpl(
+            getBookingDetailUsecase: getDetailUsecase,
+          ),
+        ),
 
         // ===== B. PRESENTATION (ChangeNotifier) =====
         ChangeNotifierProvider<AuthProvider>(
-          create: (context) =>
-              AuthProvider(loginWithGoogleUseCase: context.read<LoginWithGoogle>()),
+          create: (context) => AuthProvider(
+            loginWithGoogleUseCase: context.read<LoginWithGoogle>(),
+            registerFCMTokenUseCase: context.read<RegisterFCMToken>(),
+            pushNotificationService: context.read<PushNotificationService>(),
+          ),
         ),
         ChangeNotifierProvider<StudioProvider>(
           create: (context) => StudioProvider(
@@ -188,7 +218,7 @@ class MyApp extends StatelessWidget {
             getUsecase: ctx.read<GetServiceAssignsByStudioAssign>(),
           ),
         ),
-// ===== PROFILE - PRESENTATION =====
+        // ===== PROFILE - PRESENTATION =====
         ChangeNotifierProvider<ProfileProvider>(
           create: (context) => ProfileProvider(
             getProfile: context.read<GetProfile>(),
@@ -201,6 +231,16 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         debugShowCheckedModeBanner: false,
         home: const LoginPage(),
+        navigatorKey: navigatorKey,
+        routes: {
+          '/booking_detail': (context) {
+            // 1. Extract argument
+            final booking = ModalRoute.of(context)?.settings.arguments as Booking;
+
+            // 2. Redirect Page
+            return BookingDetailPage(booking: booking);
+          }
+        },
       ),
     );
   }

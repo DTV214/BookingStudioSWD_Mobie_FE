@@ -12,4 +12,7 @@ abstract class AuthRepository {
   // TODO: Sau này có thể thêm các chức năng khác
   // Future<Either<Failure, void>> logout();
   // Future<Either<Failure, User>> getCurrentUser();
+
+  // Đăng kí token cho messaging
+  Future<void> registerFCMToken(String token);
 }

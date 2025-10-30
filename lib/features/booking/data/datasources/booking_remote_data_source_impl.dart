@@ -54,27 +54,95 @@ class BookingRemoteDataSourceImpl implements BookingRemoteDataSource {
       }
 
       // ✅ JSON guard (tránh parse HTML Swagger)
-      final contentType = (response.headers['content-type'] ?? '').toLowerCase();
+      final contentType = (response.headers['content-type'] ?? '')
+          .toLowerCase();
       final bodyStart = response.body.trimLeft();
-      final looksLikeHtml = bodyStart.startsWith('<!DOCTYPE') || bodyStart.startsWith('<html');
+      final looksLikeHtml =
+          bodyStart.startsWith('<!DOCTYPE') || bodyStart.startsWith('<html');
       if (!contentType.contains('application/json') || looksLikeHtml) {
-        print('[BookingDataSource] Received HTML (Swagger) instead of JSON. Wrong endpoint or redirect.');
+        print(
+          '[BookingDataSource] Received HTML (Swagger) instead of JSON. Wrong endpoint or redirect.',
+        );
         throw ServerException();
       }
 
       final Map<String, dynamic> jsonResponse = json.decode(response.body);
       final data = jsonResponse['data'];
       if (data is! List) {
-        print('[BookingDataSource] "data" is not a List. body=${response.body}');
+        print(
+          '[BookingDataSource] "data" is not a List. body=${response.body}',
+        );
         throw ServerException();
       }
 
       final bookings = data
-          .map<BookingModel>((e) => BookingModel.fromJson(e as Map<String, dynamic>))
+          .map<BookingModel>(
+            (e) => BookingModel.fromJson(e as Map<String, dynamic>),
+          )
           .toList();
 
       print('[BookingDataSource] Parsed ${bookings.length} bookings.');
       return bookings;
+    } on SocketException catch (e) {
+      print('[BookingDataSource] SocketException: $e');
+      throw NetworkException();
+    } on http.ClientException catch (e) {
+      print('[BookingDataSource] ClientException: $e');
+      throw NetworkException();
+    } catch (e) {
+      print('[BookingDataSource] Unknown error: $e');
+      throw ServerException();
+    }
+  }
+
+  @override
+  Future<BookingModel> getBookingDetail(String bookingId) async {
+    final url = Uri.parse('$_baseUrl/api/bookings/$bookingId');
+    print('[BookingDataSource] GET: $url');
+
+    try {
+      final jwt = await _getJwt();
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $jwt', // ✅ Bearer
+      };
+
+      final response = await client.get(url, headers: headers);
+      print('[BookingDataSource] Status: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        print('[BookingDataSource] ERROR body: ${response.body}');
+        throw ServerException();
+      }
+
+      // 1. Kiểm tra JSON Guard
+      final contentType = (response.headers['content-type'] ?? '').toLowerCase();
+      final bodyStart = response.body.trimLeft();
+      final looksLikeHtml = bodyStart.startsWith('<!DOCTYPE') || bodyStart.startsWith('<html');
+      if (!contentType.contains('application/json') || looksLikeHtml) {
+        print(
+          '[BookingDataSource] Received HTML (Swagger) instead of JSON. Wrong endpoint or redirect.',
+        );
+        throw ServerException();
+      }
+
+      final Map<String, dynamic> jsonResponse = json.decode(response.body);
+      final data = jsonResponse['data']; // Giả định Server trả về: {"status": 200, "data": { ... }}
+
+      // 2. SỬA ĐỔI: Chỉ trả về một đối tượng Booking (Map)
+      if (data is! Map<String, dynamic>) {
+        print(
+          '[BookingDataSource] "data" is not a single Map. body=${response.body}',
+        );
+        throw ServerException();
+      }
+
+      // 3. Parse trực tiếp BookingModel từ Map<String, dynamic>
+      final booking = BookingModel.fromJson(data);
+
+      print('[BookingDataSource] Parsed 1 booking detail successfully.');
+      // TRẢ VỀ: BookingModel duy nhất
+      return booking;
     } on SocketException catch (e) {
       print('[BookingDataSource] SocketException: $e');
       throw NetworkException();

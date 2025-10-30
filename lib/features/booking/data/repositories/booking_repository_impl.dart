@@ -48,4 +48,15 @@ class BookingRepositoryImpl implements BookingRepository {
       return Left(ServerFailure());
     }
   }
+
+  @override
+  Future<Either<Failure, Booking>> getBookingDetail(String bookingId) async {
+    try {
+      // Gọi phương thức từ Remote Data Source
+      final result = await remoteDataSource.getBookingDetail(bookingId);
+      return Right(result);
+    } on ServerException catch (e) {
+      return Left(ServerFailure());
+    }
+  }
 }
