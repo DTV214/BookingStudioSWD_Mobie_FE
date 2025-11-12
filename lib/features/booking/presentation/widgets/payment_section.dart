@@ -1,3 +1,4 @@
+// lib/features/booking/presentation/widgets/payment_section.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,10 @@ import '../../presentation/providers/payment_provider.dart';
 // Data layer local DI
 import '../../data/datasources/payment_remote_data_source_impl.dart';
 import '../../data/repositories/payment_repository_impl.dart';
+
+// NEW: cần để điều hướng sang trang cập nhật status
+import '../../domain/entities/payment.dart';
+import 'payment_status_page.dart';
 
 class PaymentSection extends StatelessWidget {
   final String bookingId;
@@ -89,7 +94,7 @@ class PaymentSection extends StatelessWidget {
                           symbol: 'đ',
                         ).format(p.amount);
                         final dateStr = DateFormat('dd/MM/yyyy HH:mm')
-                            .format(p.paymentDate);
+                            .format(p.paymentDate.toLocal());
 
                         // Status badge
                         final (statusColor, statusBg, statusLabel) =
@@ -99,7 +104,7 @@ class PaymentSection extends StatelessWidget {
                         final (methodIcon, methodLabel, methodBg, methodFg) =
                         _methodStyle(p.paymentMethod);
 
-                        return Container(
+                        final content = Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade50,
@@ -169,6 +174,32 @@ class PaymentSection extends StatelessWidget {
                               _row(Icons.person_outline,
                                   '${p.accountName} • ${p.accountEmail}'),
                             ],
+                          ),
+                        );
+
+                        // NEW: tap để chuyển sang PaymentStatusPage, quay về thì reload
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () async {
+                              final changed = await Navigator.push<bool>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PaymentStatusPage(payment: p),
+                                ),
+                              );
+                              if (changed == true && context.mounted) {
+                                await provider.fetch(bookingId);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content:
+                                    Text('Đã cập nhật trạng thái thanh toán.'),
+                                  ),
+                                );
+                              }
+                            },
+                            child: content,
                           ),
                         );
                       },
