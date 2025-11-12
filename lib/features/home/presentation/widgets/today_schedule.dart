@@ -23,16 +23,21 @@ class TodaySchedule extends StatelessWidget {
     switch (status) {
       case BookingStatus.inProgress:
         return ("Đang thực hiện", Colors.blue);
+      case BookingStatus.confirmed:
+        return ("Đã xác nhận", Colors.teal);
       case BookingStatus.completed:
-        return ("Đã xác nhận", Colors.green);
+        return ("Hoàn tất", Colors.green);
       case BookingStatus.cancelled:
         return ("Đã hủy", Colors.red);
+      case BookingStatus.awaitingPayment:
+        return ("Chờ thanh toán", Colors.orange);
       case BookingStatus.awaitingRefund:
         return ("Chờ hoàn tiền", Colors.deepPurple);
       case BookingStatus.unknown:
         return ("Không rõ", Colors.grey);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

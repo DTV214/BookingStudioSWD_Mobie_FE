@@ -79,11 +79,22 @@ class BookingCard extends StatelessWidget {
         statusText = "Chờ hoàn tiền";
         statusTagColor = Colors.deepPurple.shade50;
         break;
+      case BookingStatus.awaitingPayment:              // ✅ mới
+        statusColor = Colors.orange;
+        statusText = "Chờ thanh toán";
+        statusTagColor = Colors.orange.shade50;
+        break;
+      case BookingStatus.confirmed:                    // ✅ mới
+        statusColor = Colors.teal;
+        statusText = "Đã xác nhận";
+        statusTagColor = Colors.teal.shade50;
+        break;
       default:
         statusColor = Colors.grey;
         statusText = "Không rõ";
         statusTagColor = Colors.grey.shade50;
     }
+
 
     final priceString = NumberFormat.currency(
       locale: 'vi_VN',
