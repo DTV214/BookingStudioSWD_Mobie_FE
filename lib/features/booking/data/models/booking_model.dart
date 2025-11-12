@@ -76,10 +76,15 @@ class BookingModel extends Booking {
         return BookingStatus.cancelled;
       case 'AWAITING_REFUND':
         return BookingStatus.awaitingRefund;
+      case 'AWAITING_PAYMENT':
+        return BookingStatus.awaitingPayment;
+      case 'CONFIRMED':
+        return BookingStatus.confirmed;
       default:
         return BookingStatus.unknown;
     }
   }
 
-  // (Nếu cần, bạn có thể thêm hàm `toJson` ở đây để gửi dữ liệu đi)
+
+// (Nếu cần, bạn có thể thêm hàm `toJson` ở đây để gửi dữ liệu đi)
 }

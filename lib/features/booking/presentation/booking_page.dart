@@ -40,10 +40,15 @@ class _BookingPageState extends State<BookingPage> {
         return 'CANCELLED';
       case BookingStatus.awaitingRefund:
         return 'AWAITING_REFUND';
+      case BookingStatus.awaitingPayment:
+        return 'AWAITING_PAYMENT';
+      case BookingStatus.confirmed:
+        return 'CONFIRMED';
       case BookingStatus.unknown:
         return 'UNKNOWN';
     }
   }
+
 
   bool _sameDate(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
