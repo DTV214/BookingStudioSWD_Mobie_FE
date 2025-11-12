@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/booking_status.dart';
-import '../../domain/entities/payment.dart';
 
 // ==== ĐIỀU HƯỚNG SANG SERVICE-ASSIGN (DI cục bộ) ====
 import 'service_assign_page.dart';
@@ -27,9 +26,6 @@ import '../../presentation/providers/final_payment_provider.dart';
 import '../../domain/repositories/payment_repository.dart';
 import '../../data/datasources/payment_remote_data_source_impl.dart';
 import '../../data/repositories/payment_repository_impl.dart';
-
-// ==== Trang cập nhật status payment (mới) ====
-import 'payment_status_page.dart';
 
 // ==== Cấu hình chung ====
 const _baseUrl = 'https://bookingstudioswd-be.onrender.com';
@@ -101,13 +97,10 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   /// Trạng thái tổng của booking (badge ở "Thông tin Lịch đặt")
   late BookingStatus _bookingStatus;
 
-  int _reloadTick = 0; // ép rebuild PaymentSection sau khi back/tạo final
+  int _reloadTick = 0; // ép rebuild PaymentSection sau khi tạo final
 
   // chọn method cho Final Payment (mặc định VNPAY)
   String _finalMethod = 'VNPAY';
-
-  // danh sách payment để hiển thị và điều hướng cập nhật
-  late Future<List<Payment>> _futurePayments;
 
   @override
   void initState() {
@@ -116,8 +109,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     _bookingStatus = widget.booking.status;
 
     _futureAssigns = _fetchAssigns(widget.booking.id);
-    _futurePayments = _fetchPayments(widget.booking.id);
-
     _reloadBookingStatusFromServer();
   }
 
@@ -148,7 +139,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   Future<void> _refreshAll() async {
     setState(() {
       _futureAssigns = _fetchAssigns(widget.booking.id);
-      _futurePayments = _fetchPayments(widget.booking.id);
       _reloadTick++; // ép PaymentSection reload
     });
     await _reloadBookingStatusFromServer();
@@ -209,55 +199,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     } catch (e) {
       rethrow;
     }
-  }
-
-  /// Lấy list payments của booking (để hiển thị và bấm “Cập nhật” đi trang khác)
-  Future<List<Payment>> _fetchPayments(String bookingId) async {
-    final storage = const FlutterSecureStorage();
-    final jsonString = await storage.read(key: _cachedTokenKey);
-    if (jsonString == null) throw Exception('No cached token');
-    final map = json.decode(jsonString) as Map<String, dynamic>;
-    final raw = map['data'] ?? map['jwt'];
-    if (raw is! String || raw.isEmpty) throw Exception('Invalid token');
-    final jwt = raw;
-
-    // Endpoint staff đồng bộ với DataSource bạn đã dùng
-    final url = Uri.parse('$_baseUrl/api/payments/staff/booking/$bookingId');
-    final resp = await http.get(url, headers: {
-      'Accept': 'application/json',
-      'Authorization': 'Bearer $jwt',
-    });
-
-    if (resp.statusCode != 200) {
-      throw Exception('HTTP ${resp.statusCode}');
-    }
-
-    final contentType = (resp.headers['content-type'] ?? '').toLowerCase();
-    final bodyStart = resp.body.trimLeft();
-    final looksLikeHtml = bodyStart.startsWith('<!DOCTYPE') || bodyStart.startsWith('<html');
-    if (!contentType.contains('application/json') || looksLikeHtml) {
-      throw Exception('Non-JSON content');
-    }
-
-    final Map<String, dynamic> jsonResponse = json.decode(resp.body);
-    final data = jsonResponse['data'];
-    if (data is! List) throw Exception('Invalid data');
-
-    return data.map<Payment>((e) {
-      final j = e as Map<String, dynamic>;
-      return Payment(
-        id: j['id'] as String,
-        paymentMethod: j['paymentMethod'] as String,
-        status: j['status'] as String,
-        paymentType: j['paymentType'] as String,
-        paymentDate: DateTime.parse(j['paymentDate'] as String),
-        amount: (j['amount'] as num).toInt(),
-        bookingId: j['bookingId'] as String,
-        bookingStatus: j['bookingStatus'] as String,
-        accountEmail: j['accountEmail'] as String,
-        accountName: j['accountName'] as String,
-      );
-    }).toList();
   }
 
   Future<void> _reloadBookingStatusFromServer() async {
@@ -332,24 +273,19 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
               _buildAssignsSection(context),
               const SizedBox(height: 16),
 
-              // CŨ (giữ cho tương thích UI cũ) — dùng _currentTotal (đã cập nhật)
-              _buildPaymentSection(context),
+              // Tổng tiền (lấy từ assigns mới nhất)
+              _buildPaymentOverview(context),
               const SizedBox(height: 16),
 
-              // MỚI: Tạo Final Payment
+              // Tạo Final Payment
               _buildFinalPaymentCreator(context),
               const SizedBox(height: 16),
 
-              // Danh sách payment thực (widget cũ)
+              // Danh sách payment thực: tap vào item => PaymentStatusPage
               PaymentSection(
                 key: ValueKey(_reloadTick),
                 bookingId: widget.booking.id,
               ),
-
-              const SizedBox(height: 16),
-
-              // ✅ Danh sách payment để điều hướng sang trang cập nhật — UI đẹp
-              _buildPaymentsNavigator(context),
             ],
           ),
         ),
@@ -357,291 +293,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     );
   }
 
-  // ===== Helpers cho Payment UI =====
-  Color _payStatusColor(String s) {
-    switch (s.toUpperCase()) {
-      case 'SUCCESS':
-        return Colors.green;
-      case 'FAILED':
-        return Colors.red;
-      case 'PENDING':
-      default:
-        return Colors.orange;
-    }
-  }
-
-  String _payStatusLabelVi(String s) {
-    switch (s.toUpperCase()) {
-      case 'SUCCESS':
-        return 'Thành công';
-      case 'FAILED':
-        return 'Thất bại';
-      case 'PENDING':
-      default:
-        return 'Chờ xử lý';
-    }
-  }
-
-  String _payTypeLabelVi(String t) {
-    switch (t.toUpperCase()) {
-      case 'DEPOSIT':
-        return 'Đặt cọc';
-      case 'FULL_PAYMENT':
-        return 'Thanh toán đủ';
-      case 'FINAL':
-        return 'Thanh toán cuối';
-      default:
-        return t.toUpperCase();
-    }
-  }
-
-  String _payMethodLabel(String m) {
-    switch (m.toUpperCase()) {
-      case 'MOMO':
-        return 'MoMo';
-      case 'VNPAY':
-        return 'VNPay';
-      case 'CASH':
-        return 'Tiền mặt';
-      default:
-        return m.toUpperCase();
-    }
-  }
-
-  IconData _payMethodIcon(String m) {
-    switch (m.toUpperCase()) {
-      case 'MOMO':
-        return Icons.phone_iphone_rounded;
-      case 'VNPAY':
-        return Icons.account_balance_rounded;
-      case 'CASH':
-        return Icons.payments_rounded;
-      default:
-        return Icons.credit_card_rounded;
-    }
-  }
-
-  Widget _chip(String text, Color fg, Color bg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 12)),
-    );
-  }
-
-  // Danh sách payments + nút điều hướng “Cập nhật trạng thái” (UI đẹp hơn)
-  Widget _buildPaymentsNavigator(BuildContext context) {
-    final accent = const Color(0xFF6A40D3);
-
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.receipt_long_outlined, color: accent),
-                const SizedBox(width: 8),
-                Text(
-                  "Thanh toán của booking",
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            FutureBuilder<List<Payment>>(
-              future: _futurePayments,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                if (snap.hasError) {
-                  return Text(
-                    'Không tải được danh sách: ${snap.error}',
-                    style: const TextStyle(color: Colors.red),
-                  );
-                }
-                final list = snap.data ?? const <Payment>[];
-                if (list.isEmpty) {
-                  return const Text('Chưa có thanh toán nào.');
-                }
-
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: list.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (_, i) {
-                    final p = list[i];
-                    final methodIcon = _payMethodIcon(p.paymentMethod);
-                    final methodLabel = _payMethodLabel(p.paymentMethod);
-                    final statusColor = _payStatusColor(p.status);
-                    final statusBg = statusColor.withOpacity(.12);
-                    final typeLabel = _payTypeLabelVi(p.paymentType);
-                    final amountStr = NumberFormat.currency(locale: "vi_VN", symbol: "đ").format(p.amount);
-                    final timeStr = DateFormat('dd/MM/yyyy HH:mm').format(p.paymentDate);
-
-                    return Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Avatar phương thức
-                          Container(
-                            height: 44,
-                            width: 44,
-                            decoration: BoxDecoration(
-                              color: accent.withOpacity(.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(methodIcon, color: accent),
-                          ),
-                          const SizedBox(width: 12),
-
-                          // Nội dung chính
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Dòng 1: Method + Amount
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        methodLabel,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 15,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '• $amountStr',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-
-                                // Dòng 2: Chips trạng thái & loại
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    _chip(_payStatusLabelVi(p.status), statusColor, statusBg),
-                                    _chip(typeLabel, Colors.blue, Colors.blue.withOpacity(.1)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-
-                                // Dòng 3: Thời gian
-                                Row(
-                                  children: [
-                                    const Icon(Icons.schedule_rounded, size: 14, color: Colors.grey),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        timeStr,
-                                        style: const TextStyle(color: Colors.grey, fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-
-                                // Dòng 4: Booking status (raw)
-                                Row(
-                                  children: [
-                                    const Icon(Icons.info_outline, size: 14, color: Colors.grey),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        'Booking: ${p.bookingStatus.toUpperCase()}',
-                                        style: const TextStyle(color: Colors.grey, fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-
-                                // Dòng 5: Mã payment
-                                Row(
-                                  children: [
-                                    const Icon(Icons.tag_outlined, size: 14, color: Colors.grey),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        'Mã: ${p.id}',
-                                        style: const TextStyle(color: Colors.grey, fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(width: 12),
-
-                          // Nút cập nhật
-                          Column(
-                            children: [
-                              OutlinedButton.icon(
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                label: const Text('Cập nhật'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                                onPressed: () async {
-                                  final changed = await Navigator.push<bool>(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => PaymentStatusPage(payment: p),
-                                    ),
-                                  );
-                                  if (changed == true && mounted) {
-                                    await _refreshAll();
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // ===== UI blocks =====
 
   Widget _buildCustomerCard(BuildContext context) {
     return Card(
@@ -924,8 +576,8 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
     }
   }
 
-  // (GIỮ NGUYÊN) Section thanh toán tổng quan — nhưng dùng _currentTotal đã cập nhật
-  Widget _buildPaymentSection(BuildContext context) {
+  // Tổng quan thanh toán (chỉ hiển thị tổng tiền hiện tại)
+  Widget _buildPaymentOverview(BuildContext context) {
     final priceString = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(_currentTotal);
 
     return Card(
@@ -950,12 +602,6 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                 priceString,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
               ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.credit_card_outlined, color: Colors.grey),
-              title: const Text("Phương thức thanh toán"),
-              trailing: const Text("Đang tải...", style: TextStyle(color: Colors.grey)),
             ),
           ],
         ),
